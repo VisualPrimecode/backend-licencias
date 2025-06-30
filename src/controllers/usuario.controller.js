@@ -1,23 +1,61 @@
-const db = require('../config/db');
+const Usuario = require('../models/usuario.model');
 
 exports.getUsuarios = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM usuarios');
-    res.json(rows);
+    const usuarios = await Usuario.getAllUsuarios();
+    res.json(usuarios);
   } catch (error) {
     res.status(500).json({ error: 'Error al obtener usuarios' });
   }
 };
 
 exports.createUsuario = async (req, res) => {
-  const { nombre, email, contraseña, rol } = req.body;
   try {
-    const [result] = await db.query(
-      'INSERT INTO usuarios (nombre, email, contraseña, rol, activo) VALUES (?, ?, ?, ?, ?)',
-      [nombre, email, contraseña, rol, true]
-    );
-    res.status(201).json({ id: result.insertId });
+    const { nombre, email, contraseña, rol } = req.body;
+    const id = await Usuario.createUsuario({ nombre, email, contraseña, rol });
+    res.status(201).json({ id });
   } catch (error) {
     res.status(500).json({ error: 'Error al crear usuario' });
+  }
+};
+exports.updateUsuario = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const datosActualizados = req.body;
+
+    // Validación básica
+    if (!id) {
+      return res.status(400).json({ error: 'ID de usuario requerido' });
+    }
+
+    const result = await Usuario.updateUsuario(id, datosActualizados);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    res.json({ mensaje: 'Usuario actualizado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al actualizar usuario' });
+  }
+};
+exports.deleteUsuario = async (req, res) => {
+  console.log('Eliminando usuario...');
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'ID de usuario requerido' });
+    }
+
+    const result = await Usuario.deleteUsuario(id);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
+    }
+
+    res.json({ mensaje: 'Usuario eliminado correctamente' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar usuario' });
   }
 };

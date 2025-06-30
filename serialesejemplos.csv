@@ -1,0 +1,3 @@
+codigo,producto_id,estado,observaciones,usuario_id
+ABC123,4,disponible,Lote inicial,1
+XYZ789,4,asignado,Asignado carga masiva,1
