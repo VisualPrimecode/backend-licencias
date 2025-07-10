@@ -1,5 +1,4 @@
-// src/services/woocommerce.service.js
-const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
+/*const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
 
 const api = new WooCommerceRestApi({
   url: process.env.WOOCOMMERCE_URL,
@@ -21,10 +20,10 @@ module.exports = {
 
   getPedidoPorId: async (id) => {
     try {
-      const response = await api.get(`orders/${id}`);
+      const response = await api.get("orders/${id}");
       return response.data;
     } catch (error) {
-      console.error(`Error obteniendo pedido ${id}:`, error.response?.data || error);
+      console.error("Error obteniendo pedido ${id}: ", error.response?.data || error);
       throw error;
     }
   },
@@ -53,4 +52,19 @@ module.exports = {
       throw error;
     }
   }
+};
+
+ */
+
+
+const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
+
+// Función que crea una instancia del cliente WooCommerce con la configuración de la base de datos
+const createWooApiClient = (config) => {
+  return new WooCommerceRestApi({
+    url: config.url,
+    consumerKey: config.clave_cliente,
+    consumerSecret: config.clave_secreta,
+    version: "wc/v3"
+  });
 };

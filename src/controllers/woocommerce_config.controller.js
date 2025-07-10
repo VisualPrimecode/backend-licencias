@@ -8,6 +8,32 @@ exports.getAllConfigs = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener configuraciones' });
   }
 };
+//obtener todos los prodcutos de  un WooCommerce
+exports.getAllConfigsWooProducts = async (req, res) => {
+  try {
+    const config = await WooConfig.getProducts(req.params.id);
+    if (!config) {
+      return res.status(404).json({ error: 'Configuración no encontrada' });
+    }
+    res.json(config);
+  } catch (error) {
+    console.error('Error al obtener configuraciones WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener configuraciones' });
+  }
+};
+//obtener todos los pedidos de un WooCommerce
+exports.getAllConfigsWooOrders = async (req, res) => {
+  try {
+    const config = await WooConfig.getPedidos(req.params.id);
+    if (!config) {
+      return res.status(404).json({ error: 'Configuración no encontrada' });
+    }
+    res.json(config);
+  } catch (error) {
+    console.error('Error al obtener configuraciones WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener configuraciones' });
+  }
+};
 exports.getConfigById = async (req, res) => {
   try {
     const config = await WooConfig.getConfigById(req.params.id);

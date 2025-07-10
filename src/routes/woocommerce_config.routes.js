@@ -20,4 +20,12 @@ router.put('/:id', wooConfigController.updateConfig);
 // Eliminar configuración
 router.delete('/:id', wooConfigController.deleteConfig);
 
+// Obtener productos de WooCommerce por ID de configuración
+router.get('/woo/:id/products', wooConfigController.getAllConfigsWooProducts);
+
+// Obtener pedidos de WooCommerce por ID de configuración
+router.get('/woo/:id/orders', wooConfigController.getAllConfigsWooOrders);
+
+
+
 module.exports = router;

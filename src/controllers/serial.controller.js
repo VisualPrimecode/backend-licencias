@@ -232,3 +232,24 @@ exports.previsualizarSeriales = async (req, res) => {
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
 };
+exports.obtenerSerialDisponible = async (req, res) => {
+  try {
+    const { producto_id, woocommerce_id } = req.body;
+
+    // Validación básica
+    if (!producto_id || !woocommerce_id) {
+      return res.status(400).json({ error: 'producto_id y woocommerce_id son requeridos' });
+    }
+
+    const serial = await Serial.obtenerSerialDisponible(producto_id, woocommerce_id);
+
+    if (!serial) {
+      return res.status(404).json({ error: 'No hay seriales disponibles para este producto y woocommerce' });
+    }
+
+    res.status(200).json(serial);
+  } catch (error) {
+    console.error('❌ Error en obtenerSerialDisponible:', error);
+    res.status(500).json({ error: 'Error al obtener serial disponible' });
+  }
+};

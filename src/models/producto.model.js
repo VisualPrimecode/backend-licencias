@@ -14,12 +14,14 @@ const getProductoById = async (id) => {
 
 // Crear un nuevo producto
 const createProducto = async ({
+  
   nombre,
   categoria,
   subcategoria,
   tipo_licencia,
   requiere_online
 }) => {
+  console.log("entro en createproducto")
   const [result] = await db.query(
     `INSERT INTO productos (nombre, categoria, subcategoria, tipo_licencia, requiere_online)
      VALUES (?, ?, ?, ?, ?)`,

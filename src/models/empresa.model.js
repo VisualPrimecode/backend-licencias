@@ -142,6 +142,21 @@ const asignarProductoAEmpresa = async ({ empresa_id, producto_id, precio, stock 
     throw new Error('Error al asignar producto a empresa: ' + error.message);
   }
 };
+// Obtener empresa y primer usuario por ID config WooCommerce
+const getEmpresaYUsuarioByWooConfigId = async (configId) => {
+  const [rows] = await db.query(
+    `
+    SELECT e.*, ue.usuario_id
+    FROM woocommerce_api_config w
+    INNER JOIN empresas e ON w.empresa_id = e.id
+    LEFT JOIN usuarios_empresas ue ON e.id = ue.empresa_id
+    WHERE w.id = ?
+    LIMIT 1
+    `,
+    [configId]
+  );
+  return rows[0]; // asumimos que solo nos interesa el primero
+};
 
 
 module.exports = {
@@ -155,5 +170,6 @@ module.exports = {
   getEmpresaPorUsuario,
   getProductosPorEmpresa,
   asignarProductoAEmpresa,
-  getUsuariosPorEmpresa
+  getUsuariosPorEmpresa,
+  getEmpresaYUsuarioByWooConfigId
 };

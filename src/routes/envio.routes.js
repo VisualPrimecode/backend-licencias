@@ -17,4 +17,10 @@ router.put('/:id', envioController.updateEnvio);
 // Eliminar un envío
 router.delete('/:id', envioController.deleteEnvio);
 
+router.get('/estado/envio', envioController.consultarEstadoEnvio);
+
+router.get('/verificar/registroEnvio', envioController.verificarEnvioPorPedidoWoo);
+
+
+
 module.exports = router;

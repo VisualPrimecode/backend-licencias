@@ -1,24 +1,21 @@
 // routes/webhook.routes.js
-const express = require('express');
+/*const express = require('express');
 const router = express.Router();
 //webhook en general debe evolucionar para tener un crud ya que habran que gestionar varios webhooks para muchas emrpesas
 router.post('/pedido-completado', async (req, res) => {
-  console.log('🔔 Webhook recibido: Order updated');
-
   try {
     const data = req.body;
-
+    console.log('Datos del webhook:', req.body);
     // Validar estado del pedido
     if (data.status !== 'completed') {
+      
       console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
       return res.status(200).json({ mensaje: `Pedido ignorado, estado: ${data.status}` });
     }
-
     // Valores estáticos
     const empresa_id = 7;
     const usuario_id = 1;
     const serial_id = 30;
-
     // Extracción de campos
     const producto = data.line_items?.[0] || {};
     const billing = data.billing || {};
@@ -52,9 +49,19 @@ router.post('/pedido-completado', async (req, res) => {
   }
 });
 
+router.get('/webhooks', async (req, res) => {
+  try {
+    const webhooks = await wooService.getWebhooks();
+    res.status(200).json(webhooks);
+  } catch (error) {
+    console.error('❌ Error al obtener webhooks:', error);
+    res.status(500).json({ mensaje: 'Error al obtener webhooks' });
+  }
+});
 
 router.get('/pedido-completado', (req, res) => {
   res.status(200).send('Webhook activo');
 });
 
 module.exports = router;
+*/

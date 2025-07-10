@@ -25,18 +25,22 @@ const plantillaRoutes = require('./routes/plantilla.routes');
 const serialRoutes = require('./routes/serial.routes');
 const envioRoutes = require('./routes/envio.routes');
 const webhookRoutes = require('./routes/webhook.routes');
+//rutas auxliares para intereactuar con la api de woocomerse
 const wooRoutes = require('./routes/woocomerce.routes');
+//rutas para crud de datos de configuracion de woocomerce
 const wooConfigRoutes = require('./routes/woocommerce_config.routes');
-const webhooksRoutes = require('./routes/webhooks.routes');
 
+const webhooksRoutes = require('./routes/webhooks.routes');
+const MappingProdcutsRoutes = require('./routes/wooProductMapping.routes');
 const app = express();
 app.use(express.json());
 
 // 📦 Rutas API
 app.use('/api/woocommerce-config', wooConfigRoutes);
-app.use('/api/woocommerce', wooRoutes);
+app.use('/api/map-products', MappingProdcutsRoutes);
+//app.use('/api/woocommerce', wooRoutes);
 //webhook de prueba
-app.use('/api/webhooks', webhookRoutes);
+//app.use('/api/webhooks', webhookRoutes);
 //nuevo endpoint para un crud de webhook 
 app.use('/api/webhooks-crud', webhooksRoutes);
 app.use('/api/usuarios', usuarioRoutes);

@@ -25,5 +25,8 @@ router.put('/:id', serialController.updateSerial);
 // Eliminar un serial
 router.delete('/:id', serialController.deleteSerial);
 
+// Obtener seriales por producto_id
+router.post('/disponible', serialController.obtenerSerialDisponible);
+
 
 module.exports = router;

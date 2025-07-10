@@ -2,6 +2,7 @@ const Empresa = require('../models/empresa.model');
 
 // Obtener todos los productos asociados a una empresa específica
 exports.getProductosPorEmpresa = async (req, res) => {
+  console.log('🔍 Obteniendo productos para la empresa con ID: %s', req.params.empresaId);
   const empresaId = req.params.empresaId;
 
   try {
@@ -231,3 +232,27 @@ exports.asignarProductoAEmpresa = async (req, res) => {
   }
 };
 
+exports.getEmpresaYUsuarioByWooConfigId = async (req, res) => {
+  try {
+    const configId = req.params.configId;
+
+    const resultado = await Empresa.getEmpresaYUsuarioByWooConfigId(configId);
+
+    if (!resultado) {
+      return res.status(404).json({ error: 'No se encontró ninguna empresa asociada al ID de configuración proporcionado.' });
+    }
+
+    res.json({
+      empresa: {
+        id: resultado.id,
+        nombre: resultado.nombre,
+        dominio_web: resultado.dominio_web,
+        email_contacto: resultado.email_contacto
+      },
+      usuario_id: resultado.usuario_id || null, // Puede no existir
+    });
+  } catch (error) {
+    console.error('Error al obtener empresa y usuario:', error);
+    res.status(500).json({ error: 'Error al obtener empresa y usuario' });
+  }
+};

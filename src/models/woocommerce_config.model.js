@@ -1,10 +1,73 @@
 const db = require('../config/db');
+const model = require('../models/webhook.model');
 
 // Obtener todas las configuraciones WooCommerce
 const getAllConfigs = async () => {
   const [rows] = await db.query('SELECT * FROM woocommerce_api_config');
   return rows;
 };
+//obtener productos de WooCommerce por ID de wooCommerce
+const getProducts = async (id) => {
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    const response = await api.get("products");
+
+    // Filtrar solo los campos que necesitas
+    const filteredProducts = response.data.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.price
+    }));
+
+    return filteredProducts;
+  } catch (error) {
+    console.error("Error obteniendo productos:", error.response?.data || error);
+    throw error;
+  }
+};
+
+//pedidos
+const getPedidos = async (id) => {
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    const response = await api.get("orders");
+
+    // Filtrar pedidos con estado "completed"
+    const completedOrders = response.data.filter(order => order.status === "completed");
+
+    // Filtrar los campos relevantes de cada pedido
+    const filteredOrders = completedOrders.map(order => ({
+      id: order.id,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`,
+      customer_email: order.billing.email,
+      status: order.status,
+      products: order.line_items.map(item => ({
+        product_id: item.product_id,
+        name: item.name,
+        quantity: item.quantity
+      }))
+    }));
+
+    return filteredOrders;
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+
+
+
+
+const getPedidoPorId = async (id_pedido, id_woocommerce) => {
+    try {
+      const api = await model.getWooApiInstanceByConfigId(id_woocommerce);
+      const response = await api.get("orders/${id_pedido}");
+      return response.data;
+    } catch (error) {
+      console.error("Error obteniendo pedido ${id}: ", error.response?.data || error);
+      throw error;
+    }
+  };
 
 // Obtener configuración por ID
 const getConfigById = async (id) => {
@@ -81,4 +144,7 @@ module.exports = {
   createConfig,
   updateConfig,
   deleteConfig,
+  getProducts,
+  getPedidos,
+  getPedidoPorId
 };

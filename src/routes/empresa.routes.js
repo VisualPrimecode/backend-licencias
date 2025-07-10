@@ -31,5 +31,7 @@ router.get('/productos/:empresaId', empresaController.getProductosPorEmpresa);
 
 router.post('/asignar-producto', empresaController.asignarProductoAEmpresa);
 
+router.get('/config/:configId', empresaController.getEmpresaYUsuarioByWooConfigId);
+
 
 module.exports = router;

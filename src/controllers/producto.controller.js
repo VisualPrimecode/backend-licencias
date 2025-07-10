@@ -2,6 +2,7 @@ const Producto = require('../models/producto.model');
 
 // Obtener todos los productos
 exports.getProductos = async (req, res) => {
+  console.log("entro en getproductos")
   try {
     const productos = await Producto.getAllProductos();
     res.json(productos);
@@ -30,6 +31,7 @@ exports.getProductoById = async (req, res) => {
 
 // Crear un producto
 exports.createProducto = async (req, res) => {
+  console.log("entro en crear producto")
   try {
     const {
       nombre,

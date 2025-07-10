@@ -74,11 +74,31 @@ const insertarSerialesMasivos = async (seriales) => {
   }
 };
 
+// Obtener un serial disponible por producto y woocommerce
+const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, codigo  FROM seriales 
+       WHERE producto_id = ? 
+         AND woocommerce_id = ? 
+         AND estado = 'disponible' 
+       ORDER BY fecha_ingreso ASC 
+       LIMIT 1`,
+      [producto_id, woocommerce_id]
+    );
+
+    return rows[0]; // Devuelve el primer serial disponible, o undefined si no hay
+  } catch (error) {
+    throw new Error('Error al obtener serial disponible: ' + error.message);
+  }
+};
+
 module.exports = {
   getAllSeriales,
   getSerialById,
   createSerial,
   updateSerial,
   deleteSerial,
-  insertarSerialesMasivos
+  insertarSerialesMasivos,
+  obtenerSerialDisponible
 };

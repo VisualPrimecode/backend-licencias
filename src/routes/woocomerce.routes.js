@@ -38,4 +38,48 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
+router.get('/webhooks', async (req, res) => {
+  try {
+    const webhooks = await WooService.getWebhooks();
+    res.status(200).json(webhooks);
+  } catch (error) {
+    console.error('❌ Error al obtener webhooks:', error);
+    res.status(500).json({ mensaje: 'Error al obtener webhooks' });
+  }
+});
+// Obtener un webhook por ID
+router.get('/webhook/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const webhook = await WooService.getWebhookPorId(id);
+    res.json(webhook);
+  } catch (err) {
+    res.status(500).json({ error: `Error al obtener webhook con ID ${req.params.id}` });
+  }
+});
+
+// Actualizar un webhook por ID
+router.put('/webhook/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = req.body;
+    const webhookActualizado = await WooService.actualizarWebhook(id, data);
+    res.json(webhookActualizado);
+  } catch (err) {
+    res.status(500).json({ error: `Error al actualizar webhook con ID ${req.params.id}` });
+  }
+});
+
+// Eliminar un webhook por ID
+router.delete('/webhook/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const eliminado = await WooService.eliminarWebhook(id);
+    res.json({ mensaje: `Webhook ${id} eliminado`, data: eliminado });
+  } catch (err) {
+    res.status(500).json({ error: `Error al eliminar webhook con ID ${req.params.id}` });
+  }
+});
+
+
 module.exports = router;
