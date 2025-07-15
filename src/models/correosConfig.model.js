@@ -1,5 +1,7 @@
 const db = require('../config/db');
 
+
+
 // Obtener todas las configuraciones de correo
 const getAllCorreosConfig = async () => {
   const [rows] = await db.query('SELECT * FROM correos_config');
@@ -25,14 +27,15 @@ const createCorreoConfig = async (config) => {
     sender_name,
     sender_email,
     reply_to_email,
-    estado
+    estado,
+    uso
   } = config;
 
   const [result] = await db.query(
     `INSERT INTO correos_config (
       store_id, smtp_host, smtp_port, smtp_encryption, smtp_secure, smtp_username, smtp_password,
-      sender_name, sender_email, reply_to_email, estado
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      sender_name, sender_email, reply_to_email, estado, uso
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       store_id,
       smtp_host,
@@ -44,7 +47,8 @@ const createCorreoConfig = async (config) => {
       sender_name || null,
       sender_email,
       reply_to_email || null,
-      estado || 'activa'
+      estado || 'activa',
+      uso
     ]
   );
 
@@ -64,14 +68,15 @@ const updateCorreoConfig = async (id, config) => {
     sender_name,
     sender_email,
     reply_to_email,
-    estado
+    estado,
+    uso
   } = config;
 
   const [result] = await db.query(
     `UPDATE correos_config SET
       store_id = ?, smtp_host = ?, smtp_port = ?, smtp_encryption = ?, smtp_secure = ?,
       smtp_username = ?, smtp_password = ?, sender_name = ?,
-      sender_email = ?, reply_to_email = ?, estado = ?
+      sender_email = ?, reply_to_email = ?, estado = ?, uso = ?
      WHERE id = ?`,
     [
       store_id,
@@ -85,6 +90,7 @@ const updateCorreoConfig = async (id, config) => {
       sender_email,
       reply_to_email,
       estado,
+      uso,
       id
     ]
   );

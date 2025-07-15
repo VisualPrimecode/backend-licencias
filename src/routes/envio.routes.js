@@ -11,6 +11,9 @@ router.get('/:id', envioController.getEnvioById);
 // Crear un nuevo envío
 router.post('/', envioController.createEnvio);
 
+// Crear un nuevo envío
+router.post('/cotizaciones/', envioController.createCotizacion);
+
 // Actualizar un envío existente
 router.put('/:id', envioController.updateEnvio);
 

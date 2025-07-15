@@ -1,12 +1,14 @@
 
 const envioQueue = require('./envioQueue');
-//antigua ruta
-//const envioProcessor = require('../workers/envioProcessor');
+const cotizacionQueue = require('./cotizacionQueue');
 const envioProcessor = require('../workers/envioProcessor');
+const cotizacionProcessor = require('../workers/cotizacionProcessor');
 
-
+cotizacionQueue.process(cotizacionProcessor);
 // Vincular el procesador a la cola
 envioQueue.process(envioProcessor);
+
+
 
 console.log('📡 Worker de envío conectado a Bull');
  

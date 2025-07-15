@@ -1,5 +1,7 @@
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); // Ruta a tu cola
+const cotizacionQueue = require('../queues/cotizacionQueue');
+const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 
 
 // Obtener todos los envíos
@@ -50,22 +52,86 @@ exports.createEnvio = async (req, res) => {
 
     const id = await Envio.createEnvio(envioData);
 
+    // 📬 Obtener SMTP desde la BD
+    const config = await getSMTPConfigByStoreId(envioData.store_id || 3);
+    if (!config) {
+      return res.status(500).json({ error: 'No se encontró configuración SMTP activa' });
+    }
+
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+
     await envioQueue.add({
       id,
       ...envioData,
-      store_id: 3
+      smtpConfig
     });
 
-    return res.status(201).json({ id }); // ✅ SOLO esta respuesta
+    return res.status(201).json({ id });
   } catch (error) {
     console.error('❌ Error al crear envío:', error);
     return res.status(500).json({ error: 'Error al crear envío' });
   }
-
-  // ❌ ESTA RESPUESTA NUNCA DEBE EJECUTARSE
-  // res.status(200).json({ mensaje: 'Datos recibidos correctamente' });
 };
 
+exports.createCotizacion = async (req, res) => {
+  console.log('📝 Creando nueva cotización...');
+
+  try {
+    // Extraer datos de la cotización
+    const cotizacionData = {
+      ...req.body,
+      nombre_cliente: req.body.nombre_cliente || 'Cliente',
+      numero_cotizacion: req.body.numero_cotizacion || 'N/A',
+      store_id: req.body.store_id || 3  // Asegúrate de incluir el store_id real
+    };
+    console.log('Datos de la cotización procesados:', cotizacionData);
+    // ✅ Validación mínima
+    if (
+      !cotizacionData.email_destino ||
+      !cotizacionData.nombre_cliente ||
+      !cotizacionData.numero_cotizacion ||
+      !cotizacionData.store_id
+    ) {
+      return res.status(400).json({
+        error: 'Faltan campos obligatorios (email_destino, nombre_cliente, numero_cotizacion, store_id)'
+      });
+    }
+    console.log('1');
+    // ✅ Obtener configuración SMTP desde la BD
+    const config = await getSMTPConfigByStoreId(cotizacionData.store_id); // 'envios' o 'cotizaciones' según lo que uses
+    if (!config) {
+      return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
+    }
+    console.log('2');
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+    console.log('Configuración SMTP obtenida:', smtpConfig);
+
+    // ✅ Encolar el trabajo para el worker
+    await cotizacionQueue.add({
+      ...cotizacionData,
+      smtpConfig
+    });
+
+    console.log('✅ Job de cotización encolado');
+    return res.status(201).json({ message: 'Cotización encolada para envío' });
+
+  } catch (error) {
+    console.error('❌ Error al crear cotización:', error);
+    return res.status(500).json({ error: 'Error al crear cotización' });
+  }
+};
 
 
 // Actualizar un envío existente

@@ -5,7 +5,7 @@ dotenv.config();
 const express = require('express');
 
 // 🔁 Inicializar cola y worker de Bull
-require('./queues/initQueues');
+//require('./queues/initQueues');
 
 // ✅ Verificar conexión SMTP antes de iniciar la app
 //const { verifySMTPConnection } = require('./utils/mailer');

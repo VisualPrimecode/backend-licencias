@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 
+
 /**
  * Crea un transporter SMTP con configuración personalizada
  * @param {Object} smtpConfig - Configuración SMTP
@@ -75,24 +76,23 @@ const sendEnvioCorreo = async ({ smtpConfig, to, subject, text, html }) => {
   await transporter.sendMail(mailOptions);
 };
 
-/**
- * Verifica que las credenciales SMTP proporcionadas sean válidas
- param {Object} smtpConfig - Config SMTP
- 
-const verifySMTPConnection = async (smtpConfig) => {
-    console.log('entro en el nuevo verify');
-  const transporter = createTransporter(smtpConfig);
+const sendCotizacionCorreo = async ({ smtpConfig, to, subject, text, html }) => {
+  const transporter = await createTransporter(smtpConfig);
 
-  try {
-    await transporter.verify();
-    console.log('✅ Conexión SMTP verificada correctamente.');
-  } catch (err) {
-    console.error('❌ Error al verificar conexión SMTP:', err.message);
-    if (err.response) console.error('Respuesta SMTP:', err.response);
-  }
+  const mailOptions = {
+    from: `"${smtpConfig.sender_name}" <${smtpConfig.sender_email}>`,
+    to,
+    subject,
+    text,
+    html,
+    replyTo: smtpConfig.reply_to_email || smtpConfig.sender_email,
+  };
+
+  await transporter.sendMail(mailOptions);
 };
-*/
+
+
 module.exports = {
   sendEnvioCorreo,
-  //verifySMTPConnection
+  sendCotizacionCorreo
 };

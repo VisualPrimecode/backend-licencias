@@ -42,7 +42,8 @@ exports.createCorreoConfig = async (req, res) => {
       sender_name,
       sender_email,
       reply_to_email,
-      estado
+      estado,
+      uso
     } = req.body;
     if (!store_id || !smtp_host || !smtp_port || !smtp_username || !smtp_password || !smtp_secure) {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
@@ -59,7 +60,8 @@ exports.createCorreoConfig = async (req, res) => {
       sender_name,
       sender_email,
       reply_to_email,
-      estado
+      estado,
+      uso
     });
 
     res.status(201).json({ id });

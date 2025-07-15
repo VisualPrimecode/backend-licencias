@@ -55,9 +55,35 @@ const updateEmpresa = async (id, datos) => {
 
 // Eliminar una empresa
 const deleteEmpresa = async (id) => {
-  const [result] = await db.query('DELETE FROM empresas WHERE id = ?', [id]);
-  return result;
+  const connection = await db.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    // Eliminar registros en tablas relacionadas
+    await connection.query('DELETE FROM configuraciones_empresa WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM envios WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM plantillas_envio WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM producto_empresas WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM usuarios_empresas WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM webhooks_logs WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM woo_product_mappings WHERE empresa_id = ?', [id]);
+    await connection.query('DELETE FROM woocommerce_api_config WHERE empresa_id = ?', [id]);
+
+    // Eliminar empresa
+    await connection.query('DELETE FROM empresas WHERE id = ?', [id]);
+
+    await connection.commit();
+    connection.release();
+    return { success: true, message: 'Empresa eliminada correctamente' };
+  } catch (error) {
+    await connection.rollback();
+    connection.release();
+    throw new Error('Error al eliminar empresa: ' + error.message);
+  }
 };
+
+
 
 // Asignar un usuario a una empresa
 const asignarUsuarioAEmpresa = async ({ usuario_id, empresa_id }) => {
