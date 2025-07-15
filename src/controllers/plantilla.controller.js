@@ -13,6 +13,7 @@ exports.getPlantillas = async (req, res) => {
 
 // Obtener una plantilla por ID
 exports.getPlantillaById = async (req, res) => {
+  console.log('entro en plantill by id')
   try {
     const { id } = req.params;
     const plantilla = await Plantilla.getPlantillaById(id);
@@ -25,6 +26,25 @@ exports.getPlantillaById = async (req, res) => {
   } catch (error) {
     console.error('❌ Error al obtener plantilla:', error);
     res.status(500).json({ error: 'Error al obtener plantilla' });
+  }
+};
+
+
+// Obtener una plantilla por ID de empresa
+exports.getPlantillaByIdEmpresa = async (req, res) => {
+   console.log('entro en plantill by id empresa')
+  try {
+    const { id } = req.params;
+    const plantilla = await Plantilla.getPlantillaByIdEmpresa(id);
+
+    if (!plantilla) {
+      return res.status(404).json({ error: 'Plantillas no encontrada' });
+    }
+
+    res.json(plantilla);
+  } catch (error) {
+    console.error('❌ Error al obtener plantillas:', error);
+    res.status(500).json({ error: 'Error al obtener las plantillas' });
   }
 };
 

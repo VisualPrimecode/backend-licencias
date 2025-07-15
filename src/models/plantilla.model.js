@@ -15,7 +15,7 @@ const getPlantillaById = async (id) => {
 // Obtener una plantilla por ID de empresa
 const getPlantillaByIdEmpresa = async (id) => {
   const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE empresa_id = ?', [id]);
-  return rows[0];
+  return rows;
 };
 
 // Crear una nueva plantilla

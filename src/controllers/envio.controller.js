@@ -36,33 +36,34 @@ exports.createEnvio = async (req, res) => {
   console.log('📦 Creando un nuevo envío...');
   console.log('Datos del envío:', req.body);
 
-   try {
-     const envioData = {
-       ...req.body,
-       estado: 'pendiente' // 🔄 asignar estado por defecto aquí
-     };
+  try {
+    const envioData = {
+      ...req.body,
+      estado: 'pendiente'
+    };
 
-     if (!envioData.empresa_id || !envioData.usuario_id || !envioData.producto_id) {
-       return res.status(400).json({
-         error: 'Faltan campos obligatorios (empresa_id, usuario_id, producto_id)'
-       });
-     }
+    if (!envioData.empresa_id || !envioData.usuario_id || !envioData.producto_id) {
+      return res.status(400).json({
+        error: 'Faltan campos obligatorios (empresa_id, usuario_id, producto_id)'
+      });
+    }
 
-     const id = await Envio.createEnvio(envioData);
+    const id = await Envio.createEnvio(envioData);
 
-     // ✅ Encolamos el trabajo para procesarlo en segundo plano
-     await envioQueue.add({
-       id,
-       ...envioData
-     });
+    await envioQueue.add({
+      id,
+      ...envioData,
+      store_id: 3
+    });
 
-     res.status(201).json({ id });
-   } catch (error) {
-     console.error('❌ Error al crear envío:', error);
-     res.status(500).json({ error: 'Error al crear envío' });
-   }
+    return res.status(201).json({ id }); // ✅ SOLO esta respuesta
+  } catch (error) {
+    console.error('❌ Error al crear envío:', error);
+    return res.status(500).json({ error: 'Error al crear envío' });
+  }
 
-  res.status(200).json({ mensaje: 'Datos recibidos correctamente' });
+  // ❌ ESTA RESPUESTA NUNCA DEBE EJECUTARSE
+  // res.status(200).json({ mensaje: 'Datos recibidos correctamente' });
 };
 
 
@@ -106,10 +107,9 @@ exports.deleteEnvio = async (req, res) => {
 };
 // Consultar estado del envío por woo_id y numero_pedido
 exports.consultarEstadoEnvio = async (req, res) => {
-  console.log('🔍 Consultando estado del envío...');
   try {
     const { woo_id, numero_pedido } = req.query;
-    console.log('Parámetros recibidos:', { woo_id, numero_pedido });
+   // console.log('Parámetros recibidos:', { woo_id, numero_pedido });
 
     // Validación básica
     if (!woo_id || !numero_pedido) {

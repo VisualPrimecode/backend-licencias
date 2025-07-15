@@ -32,6 +32,7 @@ const wooConfigRoutes = require('./routes/woocommerce_config.routes');
 
 const webhooksRoutes = require('./routes/webhooks.routes');
 const MappingProdcutsRoutes = require('./routes/wooProductMapping.routes');
+const correosConfigRoutes = require('./routes/correosConfig.routes');
 const app = express();
 app.use(express.json());
 
@@ -50,6 +51,7 @@ app.use('/api/productos', productoRoutes);
 app.use('/api/plantillas', plantillaRoutes);
 app.use('/api/seriales', serialRoutes);
 app.use('/api/envios', envioRoutes);
+app.use('/api/correos', correosConfigRoutes);
 
 // Ruta raíz
 app.get('/', (req, res) => {

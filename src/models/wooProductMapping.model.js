@@ -19,6 +19,8 @@ const getMappingByIdWoo = async (id) => {
 };
 
 
+
+
 // Crear un nuevo mapeo
 const createMapping = async ({ empresa_id, woocommerce_id, woo_product_id, producto_interno_id }) => {
   const [result] = await db.query(
