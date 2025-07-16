@@ -46,7 +46,7 @@ exports.createProducto = async (req, res) => {
       return res.status(400).json({ error: 'Faltan campos requeridos' });
     }
 
-    const tiposPermitidos = ['permanente', '1año', '3años'];
+    const tiposPermitidos = ['permanente', '1año', '3años','1mes', '6meses','2meses','3meses'];
     if (!tiposPermitidos.includes(tipo_licencia)) {
       return res.status(400).json({ error: `Tipo de licencia inválido. Permitidos: ${tiposPermitidos.join(', ')}` });
     }
