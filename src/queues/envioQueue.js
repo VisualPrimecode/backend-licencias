@@ -16,11 +16,13 @@ envioQueue.on('completed', async (job, result) => {
   try {
     console.log(`✅ Job de envío completado. ID: ${result.id}`);
 
-    // Enviar aviso al servidor para actualizar el estado
-    await axios.put(`http://localhost:3000/api/envios/envio/${result.id}/estado`, {
+    // Enviar aviso al servidor para actualizar el estado en local 
+   /* await axios.put(`http://localhost:3000/api/envios/envio/${result.id}/estado`, {
+      estado: 'enviado'
+    });*/
+     await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/envios/envio/${result.id}/estado`, {
       estado: 'enviado'
     });
-
     console.log(`📬 Estado actualizado vía API para ID: ${result.id}`);
 
   } catch (error) {
