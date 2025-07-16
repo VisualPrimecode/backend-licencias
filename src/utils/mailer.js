@@ -31,7 +31,6 @@ const createTransporter = async (smtpConfig) => {
       auth: { user, pass }
     });
 
-    console.log('🚀 Transporter creado exitosamente.', transporter);
 
   } catch (err) {
     console.error('❌ Error al crear el transporter:', err.message);
@@ -63,7 +62,7 @@ const createTransporter = async (smtpConfig) => {
 const sendEnvioCorreo = async ({ smtpConfig, to, subject, text, html }) => {
     console.log('entro en el nuevo sendEnvioCorreo');
   const transporter = await createTransporter(smtpConfig);
-  console.log('Transporter creado con configuración:', transporter);
+  //console.log('Transporter creado con configuración:', transporter);
 
   const mailOptions = {
     from: `"Mi Empresa" <${smtpConfig.user}>`,

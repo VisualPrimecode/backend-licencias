@@ -16,11 +16,17 @@ router.post('/cotizaciones/', envioController.createCotizacion);
 
 // Actualizar un envío existente
 router.put('/:id', envioController.updateEnvio);
+// Actualizar estado de un envío
+router.put('/envio/:id/estado', envioController.updateEstadoEnvio);
+
 
 // Eliminar un envío
 router.delete('/:id', envioController.deleteEnvio);
 
 router.get('/estado/envio', envioController.consultarEstadoEnvio);
+
+
+
 
 router.get('/verificar/registroEnvio', envioController.verificarEnvioPorPedidoWoo);
 

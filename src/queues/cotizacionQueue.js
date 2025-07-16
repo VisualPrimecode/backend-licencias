@@ -1,16 +1,18 @@
-// queues/cotizacionQueue.js
 const Queue = require('bull');
-const redis = require('../config/redis');
+
 console.log('🔁 Inicializando cola de cotización...');
+
 const cotizacionQueue = new Queue('cotizacionQueue', {
-    
   redis: {
-    host: redis.options.host,
-    port: redis.options.port
+    port: 6379,
+    host: 'tough-rat-53689.upstash.io',
+    password: 'AdG5AAIjcDFhYjRkMDViYTAzNTE0NTU0YWE4N2E4M2E3NDFjNGY1N3AxMA',
+    tls: {} // <= Requerido por Upstash para habilitar TLS
   }
-  
 });
-console.log('✅ Cola de cotización inicializada');  
+
+console.log('✅ Cola de cotización inicializada');
+
 cotizacionQueue.on('error', (err) => {
   console.error('❌ Error en cotizacionQueue:', err);
 });

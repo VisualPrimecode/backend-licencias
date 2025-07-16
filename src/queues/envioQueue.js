@@ -1,32 +1,51 @@
 const Queue = require('bull');
-const redis = require('../config/redis');
-const { updateEstadoEnvio } = require('../models/envio.model'); // 👈 Asegúrate de importar esto
 
 const envioQueue = new Queue('envioQueue', {
   redis: {
-    host: redis.options.host,
-    port: redis.options.port
+    host: 'tough-rat-53689.upstash.io',
+    port: 6379,
+    password: 'AdG5AAIjcDFhYjRkMDViYTAzNTE0NTU0YWE4N2E4M2E3NDFjNGY1N3AxMA',
+    tls: {} // Requerido por Upstash para conexión segura
   }
 });
 
 // ✅ Evento: Job completado con éxito
+const axios = require('axios');
+
 envioQueue.on('completed', async (job, result) => {
   try {
     console.log(`✅ Job de envío completado. ID: ${result.id}`);
-    await updateEstadoEnvio(result.id, 'enviado');
+
+    // Enviar aviso al servidor para actualizar el estado
+    await axios.put(`http://localhost:3000/api/envios/envio/${result.id}/estado`, {
+      estado: 'enviado'
+    });
+
+    console.log(`📬 Estado actualizado vía API para ID: ${result.id}`);
+
   } catch (error) {
-    console.error(`❌ Error al actualizar estado a 'enviado' para ID: ${result.id}`, error);
+    console.error(`❌ Error al notificar estado 'enviado' para ID: ${result.id}`, error.message);
   }
 });
 
+
 // ❌ Evento: Job fallido
 envioQueue.on('failed', async (job, err) => {
+  const envioId = job?.data?.id;
+
+  if (!envioId) {
+    console.error('❌ Job fallido, pero no se encontró un ID válido en los datos del job.');
+    return;
+  }
+
   try {
-    console.error(`❌ Job de envío fallido. ID: ${job.data.id}`);
-    await updateEstadoEnvio(job.data.id, 'fallido');
+    console.error(`❌ Job de envío fallido. ID: ${envioId}. Error: ${err.message}`);
+    await Envio.updateEstadoEnvio(envioId, 'fallido');
+    console.log(`📌 Estado del envío con ID ${envioId} actualizado a 'fallido'`);
   } catch (error) {
-    console.error(`❌ Error al actualizar estado a 'fallido' para ID: ${job.data.id}`, error);
+    console.error(`❌ Error al actualizar el estado a 'fallido' para el envío con ID: ${envioId}`, error);
   }
 });
+
 
 module.exports = envioQueue;

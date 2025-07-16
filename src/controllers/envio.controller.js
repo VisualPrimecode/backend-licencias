@@ -153,6 +153,33 @@ exports.updateEnvio = async (req, res) => {
   }
 };
 
+//actulizar estado de un envío
+
+// EnvioController.js
+exports.updateEstadoEnvio = async (req, res) => {
+  console.log('🔄 Actualizando estado del envío...');
+  try {
+    const { id } = req.params;
+    const { estado } = req.body;
+
+    if (!estado) {
+      return res.status(400).json({ error: 'El campo "estado" es requerido' });
+    }
+
+    const envioExistente = await Envio.getEnvioById(id);
+
+    if (!envioExistente) {
+      return res.status(404).json({ error: 'Envío no encontrado' });
+    }
+
+    await Envio.updateEstadoEnvio(id, estado);
+    res.json({ mensaje: 'Estado del envío actualizado correctamente' });
+  } catch (error) {
+    console.error('❌ Error al actualizar el estado del envío:', error);
+    res.status(500).json({ error: 'Error al actualizar el estado del envío' });
+  }
+};
+
 // Eliminar un envío
 exports.deleteEnvio = async (req, res) => {
   console.log('🗑️ Eliminando envío...');
@@ -173,6 +200,7 @@ exports.deleteEnvio = async (req, res) => {
 };
 // Consultar estado del envío por woo_id y numero_pedido
 exports.consultarEstadoEnvio = async (req, res) => {
+  console.log('🔍 Consultando estado del envío por Woo ID y número de pedido...');
   try {
     const { woo_id, numero_pedido } = req.query;
    // console.log('Parámetros recibidos:', { woo_id, numero_pedido });
@@ -198,6 +226,7 @@ exports.consultarEstadoEnvio = async (req, res) => {
 
 // Verificar si existe un envío por número de pedido y WooCommerce ID
 exports.verificarEnvioPorPedidoWoo = async (req, res) => {
+  console.log('🔍 Verificando si existe un envío por número de pedido y WooCommerce ID...');
   try {
     const { numero_pedido, woo_id } = req.query;
 
