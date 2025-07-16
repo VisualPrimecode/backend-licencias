@@ -37,7 +37,10 @@ const getPedidos = async (id) => {
     console.log("Respuesta de pedidos:", response.data);
 
     // Filtrar pedidos con estado "completed"
-    const completedOrders = response.data.filter(order => order.status === "completed");
+// Filtrar pedidos con estado "completed" o "processing"
+const completedOrders = response.data.filter(order => 
+  order.status === "completed" || order.status === "processing"
+);
     console.log("Pedidos completados:", completedOrders);
     // Filtrar los campos relevantes de cada pedido
     const filteredOrders = completedOrders.map(order => ({
