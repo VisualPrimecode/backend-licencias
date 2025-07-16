@@ -28,13 +28,17 @@ const getProducts = async (id) => {
 
 //pedidos
 const getPedidos = async (id) => {
+  console.log("Obteniendo pedidos para la el woocommerce con ID:", id);
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
+    console.log("esta es la api", api);
+  
     const response = await api.get("orders");
+    console.log("Respuesta de pedidos:", response.data);
 
     // Filtrar pedidos con estado "completed"
     const completedOrders = response.data.filter(order => order.status === "completed");
-
+    console.log("Pedidos completados:", completedOrders);
     // Filtrar los campos relevantes de cada pedido
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
