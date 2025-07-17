@@ -88,7 +88,7 @@ exports.createCotizacion = async (req, res) => {
       ...req.body,
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
       numero_cotizacion: req.body.numero_cotizacion || 'N/A',
-      store_id: req.body.store_id || 3  // Asegúrate de incluir el store_id real
+      store_id: req.body.woocommerce_id || 3  // Asegúrate de incluir el store_id real
     };
     console.log('Datos de la cotización procesados:', cotizacionData);
     // ✅ Validación mínima
