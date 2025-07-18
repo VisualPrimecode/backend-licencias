@@ -1,6 +1,7 @@
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); // Ruta a tu cola
 const cotizacionQueue = require('../queues/cotizacionQueue');
+const Plantilla = require('../models/plantilla.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 
 
@@ -83,14 +84,24 @@ exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');
 
   try {
-    // Extraer datos de la cotización
+    // ✅ Obtener plantilla relacionada a la tienda y motivo 'cotizacion'
+    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(req.body.woocommerce_id, 'cotizacion');
+
+    if (!plantillas || plantillas.length === 0) {
+      return res.status(404).json({ error: 'No se encontró plantilla para cotización en esta tienda' });
+    }
+
+    const plantilla = plantillas[0]; // asumes que usas la primera encontrada
+    console.log('Plantilla de cotización encontrada:', plantilla);
     const cotizacionData = {
       ...req.body,
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
       numero_cotizacion: req.body.numero_cotizacion || 'N/A',
-      store_id: req.body.woocommerce_id || 3  // Asegúrate de incluir el store_id real
+      store_id: req.body.woocommerce_id || 3
     };
+
     console.log('Datos de la cotización procesados:', cotizacionData);
+
     // ✅ Validación mínima
     if (
       !cotizacionData.email_destino ||
@@ -102,13 +113,17 @@ exports.createCotizacion = async (req, res) => {
         error: 'Faltan campos obligatorios (email_destino, nombre_cliente, numero_cotizacion, store_id)'
       });
     }
+
     console.log('1');
+
     // ✅ Obtener configuración SMTP desde la BD
-    const config = await getSMTPConfigByStoreId(cotizacionData.store_id); // 'envios' o 'cotizaciones' según lo que uses
+    const config = await getSMTPConfigByStoreId(cotizacionData.store_id);
     if (!config) {
       return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
     }
+
     console.log('2');
+
     const smtpConfig = {
       host: config.smtp_host,
       port: config.smtp_port,
@@ -116,12 +131,14 @@ exports.createCotizacion = async (req, res) => {
       user: config.smtp_username,
       pass: config.smtp_password
     };
+
     console.log('Configuración SMTP obtenida:', smtpConfig);
 
     // ✅ Encolar el trabajo para el worker
     await cotizacionQueue.add({
       ...cotizacionData,
-      smtpConfig
+      smtpConfig,
+      plantilla // 👈 añadimos la plantilla que recuperamos
     });
 
     console.log('✅ Job de cotización encolado');
