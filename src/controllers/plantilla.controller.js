@@ -48,6 +48,30 @@ exports.getPlantillaByIdEmpresa = async (req, res) => {
   }
 };
 
+
+// Obtener una plantilla por ID de woo
+exports.getPlantillaByWooAndMotivo = async (req, res) => {
+  try {
+    const { woo_id, motivo } = req.params;
+
+    if (!woo_id || !motivo) {
+      return res.status(400).json({ error: 'woo_id y motivo son requeridos' });
+    }
+
+    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(woo_id, motivo);
+
+    if (plantillas.length === 0) {
+      return res.status(404).json({ mensaje: 'No se encontraron plantillas' });
+    }
+
+    res.json(plantillas);
+  } catch (error) {
+    console.error('❌ Error al obtener plantilla por woo_id y motivo:', error);
+    res.status(500).json({ error: 'Error al obtener plantilla' });
+  }
+};
+
+
 // Crear una nueva plantilla
 exports.createPlantilla = async (req, res) => {
   try {

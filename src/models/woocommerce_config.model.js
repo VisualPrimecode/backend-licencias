@@ -10,21 +10,42 @@ const getAllConfigs = async () => {
 const getProducts = async (id) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
-    const response = await api.get("products");
 
-    // Filtrar solo los campos que necesitas
-    const filteredProducts = response.data.map(product => ({
-      id: product.id,
-      name: product.name,
-      price: product.price
-    }));
+    const perPage = 100;
+    let page = 1;
+    let allProducts = [];
+    let keepFetching = true;
 
-    return filteredProducts;
+    while (keepFetching) {
+      const response = await api.get("products", {
+        params: {
+          per_page: perPage,
+          page: page
+        }
+      });
+
+      const products = response.data.map(product => ({
+        id: product.id,
+        name: product.name,
+        price: product.price
+      }));
+
+      allProducts.push(...products);
+
+      if (products.length < perPage) {
+        keepFetching = false;
+      } else {
+        page++;
+      }
+    }
+
+    return allProducts;
   } catch (error) {
     console.error("Error obteniendo productos:", error.response?.data || error);
     throw error;
   }
 };
+
 
 //pedidos
 const getPedidos = async (id) => {
@@ -41,7 +62,7 @@ const getPedidos = async (id) => {
 const completedOrders = response.data.filter(order => 
   order.status === "completed" || order.status === "processing"
 );
-    console.log("Pedidos completados:", completedOrders);
+    //console.log("Pedidos completados:", completedOrders);
     // Filtrar los campos relevantes de cada pedido
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,

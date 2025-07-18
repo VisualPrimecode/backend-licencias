@@ -17,6 +17,16 @@ const getPlantillaByIdEmpresa = async (id) => {
   const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE empresa_id = ?', [id]);
   return rows;
 };
+// Obtener una plantilla por ID wooCommerce y motivo
+
+const getPlantillaByIdWooYmotivo = async (id, motivo) => {
+  const [rows] = await db.query(
+    'SELECT * FROM plantillas_envio WHERE woo_id = ? AND motivo = ?',
+    [id, motivo]
+  );
+  return rows;
+};
+
 
 // Crear una nueva plantilla
 const createPlantilla = async ({
@@ -75,5 +85,6 @@ module.exports = {
   createPlantilla,
   updatePlantilla,
   deletePlantilla,
-  getPlantillaByIdEmpresa
+  getPlantillaByIdEmpresa,
+  getPlantillaByIdWooYmotivo
 };

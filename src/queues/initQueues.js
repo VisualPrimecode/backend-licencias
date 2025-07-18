@@ -2,7 +2,7 @@
 const envioQueue = require('./envioQueue');
 const cotizacionQueue = require('./cotizacionQueue');
 const envioProcessor = require('../workers/envioProcessor');
-const cotizacionProcessor = require('../workers/cotizacionProcessor');
+const cotizacionProcessor = require('../workers/cotizacionProcessor2');
 
 cotizacionQueue.process(cotizacionProcessor);
 // Vincular el procesador a la cola

@@ -1,12 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const productoController = require('../controllers/producto.controller');
+const upload = require('../middleware/upload');
+
+// Ruta para carga masiva de productos
+router.post('/carga-masiva', upload.single('archivo'), productoController.cargaMasivaProductosAux);
 
 // Obtener todos los productos
 router.get('/', productoController.getProductos);
+// Obtener un producto por ID
+router.get('/productosAux/:id', productoController.getProductosAuxByIdWooController);
 
 // Obtener un producto por ID
 router.get('/:id', productoController.getProductoById);
+
 
 // Crear un nuevo producto
 router.post('/', productoController.createProducto);

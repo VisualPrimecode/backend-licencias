@@ -2,6 +2,7 @@ const { sendCotizacionCorreo } = require('../utils/mailer');
 
 module.exports = async function cotizacionProcessor(job) {
   const cotizacion = job.data;
+  const plantilla = cotizacion.plantilla; // 👈 viene desde createCotizacion
 
   console.log(`📝 Procesando job de cotización para ${cotizacion.email_destino}`);
   console.log('Datos de la cotización:', cotizacion);
@@ -22,35 +23,25 @@ module.exports = async function cotizacionProcessor(job) {
       </tr>
     `).join('');
 
-    const htmlContent = `
-      <div style="font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 10px;">
-        <h2 style="color: #2196F3;">Cotización</h2>
-        <p>Hola <strong>${cotizacion.nombre_cliente || 'cliente'}</strong>,</p>
-        <p>Gracias por solicitar una cotización. Aquí tienes el detalle:</p>
+    // 🧠 Reemplazo de variables en la plantilla
+    let htmlContent = plantilla.cuerpo_html || '';
+    htmlContent = htmlContent
+      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'cliente')
+      .replace(/{{numero_cotizacion}}/g, cotizacion.numero_cotizacion || 'N/A')
+      .replace(/{{total}}/g, cotizacion.total || '0')
+      .replace(/{{tabla_productos}}/g, productosHtml)
+      .replace(/{{firma}}/g, plantilla.firma || '')
+      .replace(/{{logo_url}}/g, plantilla.logo_url || '');
 
-        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-          <thead>
-            <tr style="background-color: #f5f5f5;">
-              <th style="padding: 10px; border: 1px solid #ddd;">Producto</th>
-              <th style="padding: 10px; border: 1px solid #ddd;">Cantidad</th>
-              <th style="padding: 10px; border: 1px solid #ddd;">Precio</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${productosHtml}
-          </tbody>
-        </table>
-
-        <p style="margin-top: 20px;"><strong>Total:</strong> $${cotizacion.total}</p>
-
-        <p style="margin-top: 30px;">Saludos,<br>El equipo de ventas</p>
-      </div>
-    `;
+    // ✉️ Asunto con reemplazos también (opcional)
+    const subject = (plantilla.asunto || 'Tu cotización')
+      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'cliente')
+      .replace(/{{numero_cotizacion}}/g, cotizacion.numero_cotizacion || 'N/A');
 
     await sendCotizacionCorreo({
       smtpConfig,
       to: cotizacion.email_destino,
-      subject: `Tu cotización`,
+      subject,
       text: `Hola ${cotizacion.nombre_cliente}, aquí está tu cotización solicitada.`,
       html: htmlContent
     });
