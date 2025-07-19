@@ -31,7 +31,10 @@ module.exports = async function cotizacionProcessor(job) {
       .replace(/{{total}}/g, cotizacion.total || '0')
       .replace(/{{tabla_productos}}/g, productosHtml)
       .replace(/{{firma}}/g, plantilla.firma || '')
-      .replace(/{{logo_url}}/g, plantilla.logo_url || '');
+      .replace(/{{logo_url}}/g, plantilla.logo_url || '')
+      .replace(/{{encabezado}}/g, plantilla.encabezado || ''); // 👈 ESTA LÍNEA FALTABA
+    console.log('📨 HTML con reemplazos:', htmlContent);
+
 
     // ✉️ Asunto con reemplazos también (opcional)
     const subject = (plantilla.asunto || 'Tu cotización')
