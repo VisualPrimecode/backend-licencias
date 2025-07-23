@@ -1,6 +1,5 @@
 const connectToDB = require('../utils/connectToDB');
 const db = require('../config/db'); // Para conectarse al sistema y obtener los datos de conexión
-const { get } = require('../routes/informes.routes');
 
 //LICENCIAS ORIGINALES
 // Funciones para obtener informes de licencias originales
