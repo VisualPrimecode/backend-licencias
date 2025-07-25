@@ -2,6 +2,7 @@ const Queue = require('bull');
 
 console.log('🔁 Inicializando cola de cotización...');
 
+
 const cotizacionQueue = new Queue('cotizacionQueue', {
   redis: {
     port: 6379,
@@ -9,6 +10,17 @@ const cotizacionQueue = new Queue('cotizacionQueue', {
     password: 'AdG5AAIjcDFhYjRkMDViYTAzNTE0NTU0YWE4N2E4M2E3NDFjNGY1N3AxMA',
     tls: {} // <= Requerido por Upstash para habilitar TLS
   }
+});
+//en local
+// 
+/*
+const cotizacionQueue = new Queue('cotizacionQueue', {
+  redis: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: process.env.REDIS_PORT || 6379
+    // No se requiere password ni TLS para Redis local por defecto
+  }
+});
 
 const axios = require('axios');
 
@@ -46,7 +58,7 @@ cotizacionQueue.on('failed', async (job, err) => {
     console.error(`❌ Error al actualizar estado a 'fallido' para cotización ${cotizacionId}`, error.message);
   }
 });
-
+*/
 cotizacionQueue.on('error', (err) => {
   console.error('❌ Error en cotizacionQueue:', err);
 });
