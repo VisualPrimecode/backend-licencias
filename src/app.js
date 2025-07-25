@@ -35,6 +35,9 @@ const MappingProdcutsRoutes = require('./routes/wooProductMapping.routes');
 const correosConfigRoutes = require('./routes/correosConfig.routes');
 const dbConnectionConfigRoutes = require('./routes/dbConnectionConfig.routes');
 const informesRoutes = require('./routes/informes.routes');
+const cotizacionRoutes = require('./routes/cotizacion.routes');
+
+
 const app = express();
 app.use(express.json());
 
@@ -56,7 +59,7 @@ app.use('/api/envios', envioRoutes);
 app.use('/api/correos', correosConfigRoutes);
 app.use('/api/db-configs', dbConnectionConfigRoutes);
 app.use('/api/informes', informesRoutes);
-
+app.use('/api/cotizacion', cotizacionRoutes);
 // Ruta raíz
 app.get('/', (req, res) => {
   res.send('API de Licencias funcionando 🚀');

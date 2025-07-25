@@ -3,6 +3,7 @@ const envioQueue = require('../queues/envioQueue'); // Ruta a tu cola
 const cotizacionQueue = require('../queues/cotizacionQueue');
 const Plantilla = require('../models/plantilla.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
+const { createCotizacion } = require('../models/cotizacion.model');
 
 
 // Obtener todos los envíos
@@ -82,6 +83,7 @@ exports.createEnvio = async (req, res) => {
 
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');
+  console.log('Datos de la cotización:', req.body);
 
   try {
     // ✅ Obtener plantilla relacionada a la tienda y motivo 'cotizacion'
@@ -92,7 +94,6 @@ exports.createCotizacion = async (req, res) => {
     }
 
     const plantilla = plantillas[0]; // asumes que usas la primera encontrada
-    console.log('Plantilla de cotización encontrada:', plantilla);
     const cotizacionData = {
       ...req.body,
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
@@ -114,15 +115,12 @@ exports.createCotizacion = async (req, res) => {
       });
     }
 
-    console.log('1');
 
     // ✅ Obtener configuración SMTP desde la BD
     const config = await getSMTPConfigByStoreId(cotizacionData.store_id);
     if (!config) {
       return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
     }
-
-    console.log('2');
 
     const smtpConfig = {
       host: config.smtp_host,
@@ -131,18 +129,50 @@ exports.createCotizacion = async (req, res) => {
       user: config.smtp_username,
       pass: config.smtp_password
     };
-
-    console.log('Configuración SMTP obtenida:', smtpConfig);
-
+    //console.log('datos enviados a cotizacionProcessor:');
     // ✅ Encolar el trabajo para el worker
+   /* console.log('cotizacionData:', cotizacionData);
+    console.log('smtpConfig:', smtpConfig);
+    console.log('plantilla:', plantilla);*/
+
+    // 🧮 Calcular subtotal e IVA
+const total = Number(cotizacionData.total || 0);
+const subtotal = Number((total / 1.19).toFixed(0));
+const iva = total - subtotal;
+
+// 🧾 Construir HTML básico con placeholders (opcional si quieres guardarlo sin reemplazos)
+const cuerpo_html = plantilla.cuerpo_html || '';
+const asunto_correo = plantilla.asunto || 'Cotización';
+
+// 🗂️ Registrar en BD (con estado PENDIENTE)
+const id = await createCotizacion({
+  id_usuario: cotizacionData.id_usuario,
+  id_woo: cotizacionData.woocommerce_id,
+  id_empresa: cotizacionData.empresa_id,
+  nombre_cliente: cotizacionData.nombre_cliente,
+  email_destino: cotizacionData.email_destino,
+  total,
+  subtotal,
+  iva,
+  productos_json: cotizacionData.productos,
+  smtp_host: smtpConfig.host,
+  smtp_user: smtpConfig.user,
+  plantilla_usada: plantilla.id, // o plantilla.asunto si prefieres
+  asunto_correo,
+  cuerpo_html, // sin reemplazos aún
+  estado_envio: 'PENDIENTE', 
+  mensaje_error: null
+});
+
     await cotizacionQueue.add({
+      id,
       ...cotizacionData,
       smtpConfig,
       plantilla // 👈 añadimos la plantilla que recuperamos
     });
 
     console.log('✅ Job de cotización encolado');
-    return res.status(201).json({ message: 'Cotización encolada para envío' });
+return res.status(201).json({ cotizacion_id: id });
 
   } catch (error) {
     console.error('❌ Error al crear cotización:', error);

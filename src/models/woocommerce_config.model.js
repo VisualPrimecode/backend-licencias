@@ -55,7 +55,7 @@ const getPedidos = async (id) => {
     console.log("esta es la api", api);
   
     const response = await api.get("orders");
-    console.log("Respuesta de pedidos:", response.data);
+   // console.log("Respuesta de pedidos:", response.data);
 
     // Filtrar pedidos con estado "completed"
 // Filtrar pedidos con estado "completed" o "processing"
