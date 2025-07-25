@@ -21,7 +21,7 @@ const cotizacionQueue = new Queue('cotizacionQueue', {
     // No se requiere password ni TLS para Redis local por defecto
   }
 });
-
+*/
 const axios = require('axios');
 
 cotizacionQueue.on('completed', async (job, result) => {
@@ -30,7 +30,7 @@ cotizacionQueue.on('completed', async (job, result) => {
   console.log(`✅ Job de cotización completado. ID: ${cotizacionId}`);
   try {
     
-    await axios.put(`http://localhost:3000/api/cotizacion/${cotizacionId}/estado`, {
+    await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/cotizacion/${cotizacionId}/estado`, {
       estado_envio: 'ENVIADO'
     });
 
@@ -49,7 +49,7 @@ cotizacionQueue.on('failed', async (job, err) => {
   }
 
   try {
-    await axios.put(`http://localhost:3000/api/cotizacion/${cotizacionId}/estado`, {
+    await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/cotizacion/${cotizacionId}/estado`, {
       estado: 'fallido'
     });
 
@@ -58,7 +58,7 @@ cotizacionQueue.on('failed', async (job, err) => {
     console.error(`❌ Error al actualizar estado a 'fallido' para cotización ${cotizacionId}`, error.message);
   }
 });
-*/
+
 cotizacionQueue.on('error', (err) => {
   console.error('❌ Error en cotizacionQueue:', err);
 });
