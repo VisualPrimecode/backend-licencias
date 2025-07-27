@@ -208,7 +208,7 @@ exports.deleteWebhook = async (req, res) => {
     return res.status(500).json({ error: 'Error interno al eliminar webhook' });
   }
 };
-
+//obtener pedidos
 exports.pedidoCompletado = async (req, res) => {
   console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
 
@@ -300,6 +300,8 @@ if (yaExiste) {
     return res.status(500).json({ mensaje: 'Error interno al procesar el webhook' });
   }
 };
+
+
 
 //controladro woocomerce wehbook crud
 exports.getAll = async (req, res) => {

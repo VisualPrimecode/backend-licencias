@@ -4,17 +4,6 @@ dotenv.config();
 
 const express = require('express');
 
-// 🔁 Inicializar cola y worker de Bull
-//require('./queues/initQueues');
-
-// ✅ Verificar conexión SMTP antes de iniciar la app
-//const { verifySMTPConnection } = require('./utils/mailer');
-//verifySMTPConnection();
-
-// 🔁 Probar conexión a Redis
-//const redis = require('./config/redis');
-//redis.ping().then(console.log).catch(console.error);
-
 // 🔁 Importación de rutas
 
 const usuarioRoutes = require('./routes/usuario.routes');

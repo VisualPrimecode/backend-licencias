@@ -7,39 +7,27 @@ const getAllConfigs = async () => {
   return rows;
 };
 //obtener productos de WooCommerce por ID de wooCommerce
-const getProducts = async (id) => {
+
+const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
 
-    const perPage = 100;
-    let page = 1;
-    let allProducts = [];
-    let keepFetching = true;
+    console.log("estructura de la api", api);
+    console.log("queryParams", queryParams);
 
-    while (keepFetching) {
-      const response = await api.get("products", {
-        params: {
-          per_page: perPage,
-          page: page
-        }
-      });
+    // ✅ CORRECTO: sin { params: ... }
+    const response = await api.get("products", queryParams);
 
-      const products = response.data.map(product => ({
-        id: product.id,
-        name: product.name,
-        price: product.price
-      }));
+    console.log("URL final:", response.config.url);
+    console.log("Base URL:", response.config.baseURL);
+    console.log("Params:", response.config.params);
 
-      allProducts.push(...products);
-
-      if (products.length < perPage) {
-        keepFetching = false;
-      } else {
-        page++;
-      }
-    }
-
-    return allProducts;
+    return response.data.map(product => ({
+      id: product.id,
+      name: product.name,
+      price: product.price
+    }));
+    
   } catch (error) {
     console.error("Error obteniendo productos:", error.response?.data || error);
     throw error;
@@ -47,23 +35,55 @@ const getProducts = async (id) => {
 };
 
 
-//pedidos
-const getPedidos = async (id) => {
-  console.log("Obteniendo pedidos para la el woocommerce con ID:", id);
+/*
+const axios = require('axios');
+
+const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
-    console.log("esta es la api", api);
-  
-    const response = await api.get("orders");
-   // console.log("Respuesta de pedidos:", response.data);
 
-    // Filtrar pedidos con estado "completed"
-// Filtrar pedidos con estado "completed" o "processing"
-const completedOrders = response.data.filter(order => 
-  order.status === "completed" || order.status === "processing"
-);
-    //console.log("Pedidos completados:", completedOrders);
-    // Filtrar los campos relevantes de cada pedido
+    const { per_page = 10, page = 1, _fields = 'id,name,price,images' } = queryParams;
+
+    // Construimos la URL completa usando los datos de la instancia
+    const url = `${api.url}${api.wpAPIPrefix}/${api.version}/products` +
+                `?_fields=${_fields}&per_page=${per_page}&page=${page}` +
+                `&consumer_key=${api.consumerKey}&consumer_secret=${api.consumerSecret}`;
+
+    console.log("URL final:", url);
+
+    const response = await axios.get(url);
+
+    return response.data;
+  } catch (error) {
+    console.error("Error obteniendo productos:", error.response?.data || error);
+    throw error;
+  }
+};
+*/
+
+
+
+//pedidos
+const getPedidos = async (id, queryParams = {}) => {
+  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
+  console.log("queryParams recibidos:", queryParams);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    console.log("Instancia de API obtenida:", api);
+
+    // Pasamos los queryParams directamente
+    const response = await api.get("orders", queryParams);
+
+    console.log("URL final:", response.config.url);
+    console.log("Base URL:", response.config.baseURL);
+    console.log("Params:", response.config.params);
+
+    // Filtrar pedidos con estado "completed" o "processing"
+    const completedOrders = response.data.filter(order =>
+      order.status === "completed" || order.status === "processing"
+    );
+
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
       customer_name: `${order.billing.first_name} ${order.billing.last_name}`,
@@ -82,7 +102,6 @@ const completedOrders = response.data.filter(order =>
     throw error;
   }
 };
-
 
 
 

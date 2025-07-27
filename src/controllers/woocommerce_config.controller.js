@@ -11,29 +11,41 @@ exports.getAllConfigs = async (req, res) => {
 //obtener todos los prodcutos de  un WooCommerce
 exports.getAllConfigsWooProducts = async (req, res) => {
   try {
-    const config = await WooConfig.getProducts(req.params.id);
-    if (!config) {
+    const { id } = req.params;
+    const queryParams = req.query; // <-- per_page, page, _fields, etc.
+
+    const products = await WooConfig.getProducts(id, queryParams);
+
+    if (!products) {
       return res.status(404).json({ error: 'Configuración no encontrada' });
     }
-    res.json(config);
+
+    res.json(products);
   } catch (error) {
-    console.error('Error al obtener configuraciones WooCommerce:', error);
-    res.status(500).json({ error: 'Error al obtener configuraciones' });
+    console.error('Error al obtener productos WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener productos WooCommerce' });
   }
 };
+
 //obtener todos los pedidos de un WooCommerce
 exports.getAllConfigsWooOrders = async (req, res) => {
   try {
-    const config = await WooConfig.getPedidos(req.params.id);
-    if (!config) {
+    const { id } = req.params;
+    const queryParams = req.query; // ✅ Añadido: recoger los query params
+
+    const orders = await WooConfig.getPedidos(id, queryParams); // ✅ Pasarlos
+
+    if (!orders) {
       return res.status(404).json({ error: 'Configuración no encontrada' });
     }
-    res.json(config);
+
+    res.json(orders);
   } catch (error) {
-    console.error('Error al obtener configuraciones WooCommerce:', error);
-    res.status(500).json({ error: 'Error al obtener configuraciones' });
+    console.error('Error al obtener pedidos WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
   }
 };
+
 exports.getConfigById = async (req, res) => {
   try {
     const config = await WooConfig.getConfigById(req.params.id);

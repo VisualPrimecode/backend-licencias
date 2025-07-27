@@ -71,11 +71,13 @@ const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
  * @returns {WooCommerceRestApi} instancia configurada con la API de WooCommerce
  */
 const getWooApiInstanceByConfigId = async (configId) => {
+  console.log("Obteniendo instancia de WooCommerce API para config_id en webhook_model.js 74:", configId);
+
   const [rows] = await db.query(
     'SELECT * FROM woocommerce_api_config WHERE id = ?',
     [configId]
   );
-
+  console.log("rows", rows)
   if (rows.length === 0) {
     throw new Error(`No se encontró configuración de WooCommerce para config_id: ${configId}`);
   }
@@ -91,7 +93,9 @@ const getWooApiInstanceByConfigId = async (configId) => {
     url: config.url,
     consumerKey: config.clave_cliente,
     consumerSecret: config.clave_secreta,
-    version: 'wc/v3' // Se puede hacer dinámico si hay una columna 'version_api' en la tabla
+    version: 'wc/v3', // Se puede hacer dinámico si hay una columna 'version_api' en la tabla
+    queryStringAuth: config.queryStringAuth === true || config.queryStringAuth === 1 || config.queryStringAuth === '1'
+    
   });
 
   return api;
