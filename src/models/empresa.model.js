@@ -32,6 +32,12 @@ const getEmpresaById = async (id) => {
   const [rows] = await db.query('SELECT * FROM empresas WHERE id = ?', [id]);
   return rows[0];
 };
+// Buscar una empresa por ID
+const getEmpresaNameById = async (id) => {
+  const [rows] = await db.query('SELECT nombre,dominio_web FROM empresas WHERE id = ?', [id]);
+  return rows[0];
+};
+
 
 // Actualizar una empresa
 const updateEmpresa = async (id, datos) => {
@@ -197,5 +203,6 @@ module.exports = {
   getProductosPorEmpresa,
   asignarProductoAEmpresa,
   getUsuariosPorEmpresa,
-  getEmpresaYUsuarioByWooConfigId
+  getEmpresaYUsuarioByWooConfigId,
+  getEmpresaNameById
 };

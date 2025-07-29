@@ -4,6 +4,8 @@ const cotizacionQueue = require('../queues/cotizacionQueue');
 const Plantilla = require('../models/plantilla.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const { createCotizacion } = require('../models/cotizacion.model');
+const { getEmpresaNameById } = require('../models/empresa.model');
+const { getProductoNameById } = require('../models/producto.model');
 
 
 // Obtener todos los envíos
@@ -40,10 +42,20 @@ exports.createEnvio = async (req, res) => {
   console.log('📦 Creando un nuevo envío...');
   console.log('Datos del envío:', req.body);
 
+  const empresaName = await getEmpresaNameById(req.body.empresa_id);
+  const productoName = await getProductoNameById(req.body.producto_id); // Asume que el nombre del producto se pasa directamente
+
+
   try {
+
+    const plantilla = await Plantilla.getPlantillaByIdProductoWoo(req.body.producto_id,req.body.woocommerce_id);
+   // console.log('Plantilla encontrada:', plantilla);
     const envioData = {
       ...req.body,
-      estado: 'pendiente'
+      estado: 'pendiente',
+      plantilla,
+      empresaName,
+      productoName
     };
 
     if (!envioData.empresa_id || !envioData.usuario_id || !envioData.producto_id) {
@@ -247,7 +259,7 @@ exports.deleteEnvio = async (req, res) => {
 };
 // Consultar estado del envío por woo_id y numero_pedido
 exports.consultarEstadoEnvio = async (req, res) => {
-  console.log('🔍 Consultando estado del envío por Woo ID y número de pedido...');
+  //console.log('🔍 Consultando estado del envío por Woo ID y número de pedido...');
   try {
     const { woo_id, numero_pedido } = req.query;
    // console.log('Parámetros recibidos:', { woo_id, numero_pedido });
@@ -259,7 +271,7 @@ exports.consultarEstadoEnvio = async (req, res) => {
 
     const estado = await Envio.getEstadoEnvio(woo_id, numero_pedido);
 
-    console.log('Estado del envío:', estado);
+    //console.log('Estado del envío:', estado);
     if (!estado) {
       return res.status(404).json({ error: 'Envío no encontrado' });
     }

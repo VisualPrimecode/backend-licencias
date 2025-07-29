@@ -63,8 +63,49 @@ const getProducts = async (id, queryParams = {}) => {
 
 
 
-//pedidos
+//pedidos para envio manual de pedidos
 const getPedidos = async (id, queryParams = {}) => {
+  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
+  console.log("queryParams recibidos:", queryParams);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    console.log("Instancia de API obtenida:", api);
+
+    // Pasamos los queryParams directamente
+    const response = await api.get("orders", queryParams);
+
+    console.log("URL final:", response.config.url);
+    console.log("Base URL:", response.config.baseURL);
+    console.log("Params:", response.config.params);
+
+    // Filtrar pedidos con estado "completed" o "processing"
+    const completedOrders = response.data.filter(order =>
+      order.status === "completed" || order.status === "processing"
+    );
+    
+    const filteredOrders = completedOrders.map(order => ({
+      id: order.id,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`,
+      customer_email: order.billing.email,
+      status: order.status,
+      total: order.total, // <-- Total del pedido
+      payment_method: order.payment_method_title || order.payment_method, // <-- Medio de pago
+      products: order.line_items.map(item => ({
+        product_id: item.product_id,
+        name: item.name,
+        quantity: item.quantity
+      }))
+    }));
+
+    return filteredOrders;
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+
+const getPedidosInforme = async (id, queryParams = {}) => {
   console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
   console.log("queryParams recibidos:", queryParams);
 
@@ -102,6 +143,7 @@ const getPedidos = async (id, queryParams = {}) => {
     throw error;
   }
 };
+
 
 
 
@@ -193,5 +235,6 @@ module.exports = {
   deleteConfig,
   getProducts,
   getPedidos,
-  getPedidoPorId
+  getPedidoPorId,
+  getPedidosInforme
 };

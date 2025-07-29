@@ -32,10 +32,36 @@ exports.getPlantillaById = async (req, res) => {
 
 // Obtener una plantilla por ID de empresa
 exports.getPlantillaByIdEmpresa = async (req, res) => {
-   console.log('entro en plantill by id empresa')
+  // console.log('entro en plantill by id empresa',req.params);
   try {
     const { id } = req.params;
     const plantilla = await Plantilla.getPlantillaByIdEmpresa(id);
+    //console.log('plantilla:', plantilla);
+
+    if (!plantilla) {
+      return res.status(404).json({ error: 'Plantillas no encontrada' });
+    }
+
+    res.json(plantilla);
+  } catch (error) {
+    console.error('❌ Error al obtener plantillas:', error);
+    res.status(500).json({ error: 'Error al obtener las plantillas' });
+  }
+};
+
+
+// Obtener una plantilla por ID de producto y id woo
+exports.getPlantillaByIdProductoWooController = async (req, res) => {
+   console.log('entro en plantill by id producto woo')
+  try {
+    const { producto_id, woo_id } = req.params;
+
+    if (!producto_id || !woo_id) {
+      return res.status(400).json({ error: 'woo_id y producto_id son requeridos' });
+    }
+
+    const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
+
 
     if (!plantilla) {
       return res.status(404).json({ error: 'Plantillas no encontrada' });
@@ -84,7 +110,10 @@ exports.createPlantilla = async (req, res) => {
       firma,
       logo_url,
       idioma,
-      activa
+      activa,
+      woo_id,
+      motivo,
+      validez_texto
     } = req.body;
 
     // Validación mínima
@@ -101,7 +130,10 @@ exports.createPlantilla = async (req, res) => {
       firma,
       logo_url,
       idioma,
-      activa: activa ? 1 : 0
+      activa: activa ? 1 : 0,
+      woo_id,
+      motivo,
+      validez_texto
     });
 
     res.status(201).json({ id });

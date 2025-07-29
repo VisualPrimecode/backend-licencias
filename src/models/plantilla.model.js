@@ -12,6 +12,12 @@ const getPlantillaById = async (id) => {
   return rows[0];
 };
 
+
+// Obtener una plantilla por ID
+const getPlantillaByIdProductoWoo = async (producto_id, woo_id) => {
+  const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE producto_id = ? AND woo_id', [producto_id, woo_id]);
+  return rows[0];
+};
 // Obtener una plantilla por ID de empresa
 const getPlantillaByIdEmpresa = async (id) => {
   const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE empresa_id = ?', [id]);
@@ -38,13 +44,29 @@ const createPlantilla = async ({
   firma,
   logo_url,
   idioma,
-  activa
+  activa,
+  woo_id,
+  motivo,
+  validez_texto
 }) => {
   const [result] = await db.query(
     `INSERT INTO plantillas_envio 
-    (empresa_id, producto_id, asunto, encabezado, cuerpo_html, firma, logo_url, idioma, activa) 
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [empresa_id, producto_id, asunto, encabezado, cuerpo_html, firma, logo_url, idioma, activa ?? 1]
+    (empresa_id, producto_id, asunto, encabezado, cuerpo_html, firma, logo_url, idioma, activa, woo_id, motivo, validez_texto) 
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      empresa_id,
+      producto_id,
+      asunto,
+      encabezado,
+      cuerpo_html,
+      firma,
+      logo_url,
+      idioma,
+      activa ?? 1,
+      woo_id ?? null,
+      motivo ?? null,
+      validez_texto ?? null
+    ]
   );
   return result.insertId;
 };
@@ -86,5 +108,6 @@ module.exports = {
   updatePlantilla,
   deletePlantilla,
   getPlantillaByIdEmpresa,
-  getPlantillaByIdWooYmotivo
+  getPlantillaByIdWooYmotivo,
+  getPlantillaByIdProductoWoo
 };

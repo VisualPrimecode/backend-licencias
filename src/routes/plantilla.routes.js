@@ -10,9 +10,13 @@ router.get('/:id', plantillaController.getPlantillaById);
 
 // Obtener un plantilla por ID de empresa
 router.get('/empresa/:id', plantillaController.getPlantillaByIdEmpresa);
+// Obtener un plantilla por ID de producto y id woo
+router.get('/producto/:producto_id/:woo_id', plantillaController.getPlantillaByIdProductoWooController);
 
 // Obtener un plantilla por ID de empresa
 router.get('/:woo_id/:motivo', plantillaController.getPlantillaByWooAndMotivo);
+
+
 
 // Crear un nuevo plantilla
 router.post('/', plantillaController.createPlantilla);

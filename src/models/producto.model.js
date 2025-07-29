@@ -14,6 +14,11 @@ const getProductoById = async (id) => {
   return rows[0];
 };
 
+const getProductoNameById = async (id) => {
+  const [rows] = await db.query('SELECT nombre FROM productos WHERE id = ?', [id]);
+  return rows[0];
+};
+
 // Crear un nuevo producto
 const createProducto = async ({
   
@@ -97,5 +102,6 @@ module.exports = {
   updateProducto,
   deleteProducto,
   insertarProductosAuxMasivos,
-  getProductoAuxByIdWoo
+  getProductoAuxByIdWoo,
+  getProductoNameById
 };

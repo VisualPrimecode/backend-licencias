@@ -34,6 +34,7 @@ exports.getAllConfigsWooOrders = async (req, res) => {
     const queryParams = req.query; // ✅ Añadido: recoger los query params
 
     const orders = await WooConfig.getPedidos(id, queryParams); // ✅ Pasarlos
+    //console.log('Orders:', orders); // ✅ Añadido: para depuración
 
     if (!orders) {
       return res.status(404).json({ error: 'Configuración no encontrada' });
