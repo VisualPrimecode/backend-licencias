@@ -158,7 +158,7 @@ const asunto_correo = plantilla.asunto || 'Cotización';
 
 // 🗂️ Registrar en BD (con estado PENDIENTE)
 const id = await createCotizacion({
-  id_usuario: cotizacionData.id_usuario,
+  id_usuario: cotizacionData.usuario_id,
   id_woo: cotizacionData.woocommerce_id,
   id_empresa: cotizacionData.empresa_id,
   nombre_cliente: cotizacionData.nombre_cliente,
