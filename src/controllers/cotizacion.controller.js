@@ -30,6 +30,7 @@ exports.getCotizacionById = async (req, res) => {
 
 // Obtener una cotización por ID Woocommerce
 exports.getCotizacionesByIdWooController = async (req, res) => {
+  console.log("Obteniendo cotización por ID WooCommerce...");
   try {
     const { id } = req.params;
     const cotizacion = await Cotizacion.getCotizacionByIdWoo(id);

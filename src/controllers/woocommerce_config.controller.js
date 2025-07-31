@@ -46,6 +46,47 @@ exports.getAllConfigsWooOrders = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
   }
 };
+exports.searchWooOrders = async (req, res) => {
+  console.log('🔍 Buscando pedidos WooCommerce con filtros...');
+  try {
+    const { id } = req.params;
+    const { name, email, startDate, endDate } = req.query; // ✅ Recoger filtros desde query params
+
+    const orders = await WooConfig.searchPedidos(id, { name, email, startDate, endDate });
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ message: 'No se encontraron pedidos con esos filtros' });
+    }
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Error al buscar pedidos WooCommerce (lento):', error);
+    res.status(500).json({ error: 'Error al buscar pedidos WooCommerce' });
+  }
+};
+
+exports.getWooOrderById = async (req, res) => {
+  console.log('🔍 Buscando pedido WooCommerce por ID...');
+  try {
+    const { id, orderId } = req.params; // ✅ Corrección aquí
+
+    if (!orderId) {
+      return res.status(400).json({ message: 'Falta el parámetro "orderId"' });
+    }
+
+    const order = await WooConfig.getPedidoById(id, orderId);
+
+    if (!order) {
+      return res.status(404).json({ message: 'Pedido no encontrado' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('❌ Error al obtener pedido por ID:', error);
+    res.status(500).json({ error: 'Error al obtener pedido por ID' });
+  }
+};
+
 
 exports.getConfigById = async (req, res) => {
   try {
