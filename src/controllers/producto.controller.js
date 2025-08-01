@@ -17,6 +17,198 @@ exports.getProductos = async (req, res) => {
   }
 };
 
+exports.getProductosDuplicados = async (req, res) => {
+  try {
+    const productos = await Producto.getProductosDuplicados();
+
+    // Agrupar y contar
+    const contador = {};
+    productos.forEach(prod => {
+      const nombre = prod.nombre.trim().toLowerCase(); // normalizamos
+      if (!contador[nombre]) {
+        contador[nombre] = [];
+      }
+      contador[nombre].push(prod);
+    });
+
+    // Filtrar duplicados (más de una entrada)
+    const duplicados = Object.values(contador).filter(arr => arr.length > 1);
+
+    res.json({ duplicados });
+  } catch (error) {
+    console.error('❌ Error al detectar productos duplicados:', error);
+    res.status(500).json({ error: 'Error al detectar duplicados' });
+  }
+};
+const stringSimilarity = require('string-similarity');
+
+// Función para limpiar y normalizar nombres
+function normalizarNombre(str) {
+  return str
+    .toLowerCase()
+    .replace(/[-–|,.:]+/g, '') // elimina símbolos comunes
+    .replace(/\s+/g, ' ')      // reduce espacios múltiples
+    .trim();
+}
+
+exports.getGruposPosiblesDuplicados = async (req, res) => {
+  try {
+    console.log('🔍 Iniciando búsqueda de posibles duplicados...');
+    const productos = await Producto.getProductosDuplicados();
+    console.log(`📦 Productos cargados: ${productos.length}`);
+
+    const umbral = 0.75;
+    const relaciones = [];
+
+    // 1. Comparar productos por pares
+    for (let i = 0; i < productos.length; i++) {
+      const a = productos[i];
+      const nombreA = normalizarNombre(a.nombre);
+
+      for (let j = i + 1; j < productos.length; j++) {
+        const b = productos[j];
+        const nombreB = normalizarNombre(b.nombre);
+
+        const score = stringSimilarity.compareTwoStrings(nombreA, nombreB);
+
+        if (score >= umbral && nombreA !== nombreB) {
+        //  console.log(`🟢 Similitud ${score.toFixed(2)} entre "${a.nombre}" y "${b.nombre}"`);
+          relaciones.push([a, b]);
+        } else {
+      //    console.log(`⚪️ Similitud baja (${score.toFixed(2)}) entre "${a.nombre}" y "${b.nombre}"`);
+        }
+      }
+    }
+
+    //console.log(`🔗 Total de relaciones encontradas: ${relaciones.length}`);
+
+    // 2. Agrupar conectados
+    const grupos = [];
+    const asignados = new Map(); // id -> grupoIndex
+
+    for (const [a, b] of relaciones) {
+      const idA = a.id;
+      const idB = b.id;
+      const grupoA = asignados.get(idA);
+      const grupoB = asignados.get(idB);
+
+      if (grupoA != null && grupoB != null) {
+        if (grupoA !== grupoB) {
+          //console.log(`🔄 Fusionando grupos ${grupoA} y ${grupoB}`);
+          const grupo1 = grupos[grupoA];
+          const grupo2 = grupos[grupoB];
+          grupo1.push(...grupo2);
+          grupos[grupoB] = [];
+          grupo2.forEach(p => asignados.set(p.id, grupoA));
+        }
+      } else if (grupoA != null) {
+        //console.log(`➕ Añadiendo "${b.nombre}" al grupo ${grupoA}`);
+        grupos[grupoA].push(b);
+        asignados.set(idB, grupoA);
+      } else if (grupoB != null) {
+      //  console.log(`➕ Añadiendo "${a.nombre}" al grupo ${grupoB}`);
+        grupos[grupoB].push(a);
+        asignados.set(idA, grupoB);
+      } else {
+        const nuevoGrupo = [a, b];
+        const index = grupos.length;
+        grupos.push(nuevoGrupo);
+        asignados.set(idA, index);
+        asignados.set(idB, index);
+    //    console.log(`🆕 Creando nuevo grupo ${index} con "${a.nombre}" y "${b.nombre}"`);
+      }
+    }
+    //este grupos si me sirven pero parce que cuando se ocupa en postamn se omite el [] que separa los grupos
+    console.log('grupos formados', grupos);
+    // 3. Limpiar grupos vacíos y duplicados
+  /*  const gruposLimpios = grupos
+      .filter(g => g.length > 0)
+      .map(g => {
+        const unicos = new Map();
+        g.forEach(p => unicos.set(p.id, p));
+        return Array.from(unicos.values());
+      });
+
+    console.log(`✅ Total de grupos formados: ${gruposLimpios.length}`);*/
+
+    res.json({ grupos/*: gruposLimpios*/ });
+  } catch (error) {
+    console.error('❌ Error agrupando duplicados similares:', error);
+    res.status(500).json({ error: 'Error al agrupar duplicados similares' });
+  }
+};
+exports.getPosiblesDuplicados = async (req, res) => {
+  try {
+    const productos = await Producto.getProductosDuplicados(); // obtiene todos
+    const posiblesDuplicados = [];
+    const umbral = 0.8; // 80%
+
+    // Normalizamos nombres y comparamos cada par una sola vez
+    for (let i = 0; i < productos.length; i++) {
+      const prodA = productos[i];
+      const nombreA = prodA.nombre.trim().toLowerCase();
+
+      for (let j = i + 1; j < productos.length; j++) {
+        const prodB = productos[j];
+        const nombreB = prodB.nombre.trim().toLowerCase();
+
+        const score = stringSimilarity.compareTwoStrings(nombreA, nombreB);
+
+        if (score >= umbral && nombreA !== nombreB) {
+          posiblesDuplicados.push({
+            productoA: { id: prodA.id, nombre: prodA.nombre },
+            productoB: { id: prodB.id, nombre: prodB.nombre },
+            similitud: score.toFixed(2)
+          });
+        }
+      }
+    }
+
+    res.json({ posiblesDuplicados });
+  } catch (error) {
+    console.error('❌ Error al detectar posibles duplicados:', error);
+    res.status(500).json({ error: 'Error al buscar posibles duplicados' });
+  }
+};
+
+
+exports.eliminarDuplicados = async (req, res) => {
+  try {
+    const productos = await Producto.getProductosDuplicados();
+
+    // Agrupamos productos por nombre normalizado
+    const grupos = {};
+    productos.forEach(prod => {
+      const nombre = prod.nombre.trim().toLowerCase();
+      if (!grupos[nombre]) grupos[nombre] = [];
+      grupos[nombre].push(prod);
+    });
+
+    const eliminados = [];
+
+    for (const nombre in grupos) {
+      const grupo = grupos[nombre];
+      if (grupo.length > 1) {
+        // Ordenamos por ID (puedes cambiar esto si prefieres otro criterio)
+        grupo.sort((a, b) => a.id - b.id);
+
+        // Nos quedamos con el primero y eliminamos los demás
+        const aEliminar = grupo.slice(1); // todos menos el primero
+
+        for (const producto of aEliminar) {
+          await Producto.deleteProducto(producto.id);
+          eliminados.push(producto.id);
+        }
+      }
+    }
+
+    res.json({ eliminados });
+  } catch (error) {
+    console.error('❌ Error al eliminar duplicados:', error);
+    res.status(500).json({ error: 'Error al eliminar duplicados' });
+  }
+};
+
 // Obtener un producto por ID
 exports.getProductoById = async (req, res) => {
   try {
@@ -36,38 +228,44 @@ exports.getProductoById = async (req, res) => {
 
 // Crear un producto
 exports.createProducto = async (req, res) => {
-  console.log("entro en crear producto")
   try {
-    const {
-      nombre,
-      categoria,
-      subcategoria,
-      tipo_licencia,
-      requiere_online
-    } = req.body;
+    const productos = Array.isArray(req.body) ? req.body : [req.body];
+    const tiposPermitidos = ['permanente', '1año', '3años', '1mes', '6meses', '2meses', '3meses'];
 
-    // Validaciones básicas
-    if (!nombre || !tipo_licencia) {
-      return res.status(400).json({ error: 'Faltan campos requeridos' });
+    const ids = [];
+
+    for (const producto of productos) {
+      const {
+        nombre,
+        categoria,
+        subcategoria,
+        tipo_licencia,
+        requiere_online
+      } = producto;
+
+      if (!nombre || !tipo_licencia) {
+        return res.status(400).json({ error: 'Faltan campos requeridos en uno de los productos' });
+      }
+
+      if (!tiposPermitidos.includes(tipo_licencia)) {
+        return res.status(400).json({ error: `Tipo de licencia inválido en uno de los productos. Permitidos: ${tiposPermitidos.join(', ')}` });
+      }
+
+      const id = await Producto.createProducto({
+        nombre,
+        categoria,
+        subcategoria,
+        tipo_licencia,
+        requiere_online: requiere_online ? 1 : 0
+      });
+
+      ids.push(id);
     }
 
-    const tiposPermitidos = ['permanente', '1año', '3años','1mes', '6meses','2meses','3meses'];
-    if (!tiposPermitidos.includes(tipo_licencia)) {
-      return res.status(400).json({ error: `Tipo de licencia inválido. Permitidos: ${tiposPermitidos.join(', ')}` });
-    }
-
-    const id = await Producto.createProducto({
-      nombre,
-      categoria,
-      subcategoria,
-      tipo_licencia,
-      requiere_online: requiere_online ? 1 : 0
-    });
-
-    res.status(201).json({ id });
+    res.status(201).json({ ids });
   } catch (error) {
-    console.error('❌ Error al crear producto:', error);
-    res.status(500).json({ error: 'Error al crear producto' });
+    console.error('❌ Error al crear productos:', error);
+    res.status(500).json({ error: 'Error al crear productos' });
   }
 };
 

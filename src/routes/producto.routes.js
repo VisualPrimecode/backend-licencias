@@ -3,6 +3,16 @@ const router = express.Router();
 const productoController = require('../controllers/producto.controller');
 const upload = require('../middleware/upload');
 
+router.get('/posibles-duplicados/grupos', productoController.getGruposPosiblesDuplicados);
+
+
+router.get('/posibles-duplicados', productoController.getPosiblesDuplicados);
+
+router.delete('/duplicados', productoController.eliminarDuplicados);
+
+
+router.get('/duplicados', productoController.getProductosDuplicados);
+
 // Ruta para carga masiva de productos
 router.post('/carga-masiva', upload.single('archivo'), productoController.cargaMasivaProductosAux);
 
@@ -13,6 +23,7 @@ router.get('/productosAux/:id', productoController.getProductosAuxByIdWooControl
 
 // Obtener un producto por ID
 router.get('/:id', productoController.getProductoById);
+
 
 
 // Crear un nuevo producto

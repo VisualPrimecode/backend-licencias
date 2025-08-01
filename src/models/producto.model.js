@@ -7,6 +7,14 @@ const getAllProductos = async () => {
   return rows;
 };
 
+const getProductosDuplicados = async () => {
+  const [rows] = await db.query('SELECT * FROM productos');
+  return rows;
+};
+
+
+
+
 // Obtener un producto por ID
 const getProductoById = async (id) => {
   console.log("entro en getProductoById");
@@ -103,5 +111,6 @@ module.exports = {
   deleteProducto,
   insertarProductosAuxMasivos,
   getProductoAuxByIdWoo,
-  getProductoNameById
+  getProductoNameById,
+  getProductosDuplicados
 };

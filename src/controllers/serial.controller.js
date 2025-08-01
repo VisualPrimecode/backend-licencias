@@ -233,6 +233,7 @@ exports.previsualizarSeriales = async (req, res) => {
   }
 };
 exports.obtenerSerialDisponible = async (req, res) => {
+  console.log('Iniciando solicitud para obtener serial disponible');
   try {
     const { producto_id, woocommerce_id } = req.body;
 
@@ -240,9 +241,10 @@ exports.obtenerSerialDisponible = async (req, res) => {
     if (!producto_id || !woocommerce_id) {
       return res.status(400).json({ error: 'producto_id y woocommerce_id son requeridos' });
     }
-
+    console.log('Producto ID:', producto_id);
+    console.log('WooCommerce ID:', woocommerce_id);
     const serial = await Serial.obtenerSerialDisponible(producto_id, woocommerce_id);
-
+    console.log('Serial obtenido:', serial);
     if (!serial) {
       return res.status(404).json({ error: 'No hay seriales disponibles para este producto y woocommerce' });
     }

@@ -62,6 +62,8 @@ const getProducts = async (id, queryParams = {}) => {
 */
 
 const getPedidoById = async (idConfig, pedidoId) => {
+  if (!idConfig || !pedidoId) throw new Error("idConfig y pedidoId son requeridos");
+
   try {
     const api = await model.getWooApiInstanceByConfigId(idConfig);
     console.log(`🔍 Buscando pedido por ID: ${pedidoId}`);
@@ -74,27 +76,35 @@ const getPedidoById = async (idConfig, pedidoId) => {
       return null;
     }
 
-    // Normalización del pedido
+    // 🔥 Filtrar solo pedidos completados
+    if (order.status !== 'completed') {
+      console.log(`⚠️ Pedido ${pedidoId} no está completado (estado: ${order.status})`);
+      return null;
+    }
+
     return {
       id: order.id,
-      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
-      customer_email: order.billing.email,
+      customer_name: `${order.billing?.first_name || ''} ${order.billing?.last_name || ''}`.trim(),
+      customer_email: order.billing?.email || null,
       status: order.status,
-      total: order.total,
+      total: parseFloat(order.total || 0),
       date_created: order.date_created,
       payment_method: order.payment_method_title || order.payment_method,
-      products: order.line_items.map(item => ({
+      products: (order.line_items || []).map(item => ({
         product_id: item.product_id,
         name: item.name,
-        quantity: item.quantity
+        quantity: item.quantity,
+        variation_id: item.variation_id || null
       }))
     };
 
   } catch (error) {
-    console.error("💥 Error al obtener pedido por ID:", error.response?.data || error);
-    throw error;
+    console.error("💥 Error al obtener pedido por ID:", error.response?.data || error.message);
+    if (error.response?.status === 404) return null;
+    throw new Error(`No se pudo obtener el pedido: ${error.message}`);
   }
 };
+
 
 // Buscar pedidos por nombre, correo o rango de fechas (versión lenta)
 const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
@@ -120,7 +130,6 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
     const start = startDate ? new Date(startDate) : defaultStart;
     const end = endDate ? new Date(endDate) : now;
 
-    // 🔧 Ajustamos el end al final del día para incluir todo el rango
     if (endDate) {
       end.setHours(23, 59, 59, 999);
     }
@@ -160,6 +169,9 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
       const orders = results.flat();
 
       for (const order of orders) {
+        // 🔥 Filtrar solo pedidos completados
+        if (order.status !== 'completed') continue;
+
         const fullName = normalizeString(`${order.billing.first_name} ${order.billing.last_name}`);
         const orderEmail = normalizeString(order.billing.email);
 
@@ -183,7 +195,6 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
             }))
           });
 
-          // 🔒 Detiene nuevas solicitudes a la API, pero sigue procesando los pedidos descargados
           if (!stopRequesting) stopRequesting = true;
         }
       }
@@ -195,7 +206,7 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
     }
 
     if (matches.length === 0) {
-      console.log("❌ No se encontró ningún pedido que coincida.");
+      console.log("❌ No se encontró ningún pedido completado que coincida.");
     }
 
     return matches;
@@ -205,6 +216,7 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
     throw error;
   }
 };
+
 
 
 //pedidos para envio manual de pedidos

@@ -50,6 +50,8 @@ const deleteMapping = async (id) => {
 
 const getProductoInternoId = async (woocommerce_id, woo_product_id) => {
   console.log('lllego al metodo del modelo');
+  console.log('woocommerce_id:', woocommerce_id);
+  console.log('woo_product_id:', woo_product_id);
   try {
     const [rows] = await db.query(
       `SELECT producto_interno_id 
@@ -58,7 +60,7 @@ const getProductoInternoId = async (woocommerce_id, woo_product_id) => {
        LIMIT 1`,
       [woocommerce_id, woo_product_id]
     );
-
+    console.log('Resultado de la consulta:', rows);
     return rows.length > 0 ? rows[0].producto_interno_id : null;
   } catch (error) {
     throw new Error('Error al buscar producto interno: ' + error.message);

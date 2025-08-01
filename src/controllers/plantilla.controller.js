@@ -100,6 +100,8 @@ exports.getPlantillaByWooAndMotivo = async (req, res) => {
 
 // Crear una nueva plantilla
 exports.createPlantilla = async (req, res) => {
+  console.log('Iniciando solicitud para crear una nueva plantilla');
+  console.log('Datos recibidos:', req.body);
   try {
     const {
       empresa_id,
@@ -111,13 +113,13 @@ exports.createPlantilla = async (req, res) => {
       logo_url,
       idioma,
       activa,
-      woo_id,
+      woocommerce_id,
       motivo,
       validez_texto
     } = req.body;
 
     // Validación mínima
-    if (!empresa_id || !producto_id || !asunto || !cuerpo_html) {
+    if (!empresa_id || !producto_id || !asunto || !cuerpo_html  || !woocommerce_id) {
       return res.status(400).json({ error: 'Faltan campos obligatorios' });
     }
 
@@ -131,7 +133,7 @@ exports.createPlantilla = async (req, res) => {
       logo_url,
       idioma,
       activa: activa ? 1 : 0,
-      woo_id,
+      woocommerce_id,
       motivo,
       validez_texto
     });

@@ -45,7 +45,7 @@ const createPlantilla = async ({
   logo_url,
   idioma,
   activa,
-  woo_id,
+  woocommerce_id,
   motivo,
   validez_texto
 }) => {
@@ -63,7 +63,7 @@ const createPlantilla = async ({
       logo_url,
       idioma,
       activa ?? 1,
-      woo_id ?? null,
+      woocommerce_id ?? null,
       motivo ?? null,
       validez_texto ?? null
     ]
