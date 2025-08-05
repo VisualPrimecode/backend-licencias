@@ -53,8 +53,8 @@ exports.getMappingByIdWoocomerce = async (req, res) => {
 exports.createMapping = async (req, res) => {
   console.log('Iniciando solicitud para crear un nuevo mapeo');
   try {
-    const { empresa_id, woocommerce_id, woo_product_id, producto_interno_id } = req.body;
-
+    const { empresa_id, woocommerce_id, woo_product_id, producto_interno_id, nombre_producto, precio, producto_externo_nombre } = req.body;
+    console.log('nombre producto exterrno:', producto_externo_nombre);
     // Validación simple
     if (!empresa_id || !woocommerce_id || !woo_product_id || !producto_interno_id) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' });
@@ -65,6 +65,9 @@ exports.createMapping = async (req, res) => {
       woocommerce_id,
       woo_product_id,
       producto_interno_id,
+      nombre_producto,
+      precio,
+      producto_externo_nombre
     });
 
     res.status(201).json({ id });
@@ -79,7 +82,7 @@ exports.updateMapping = async (req, res) => {
   console.log('Iniciando solicitud para actualizar mapeo por ID');
   try {
     const { id } = req.params;
-    const { empresa_id, woocommerce_id, woo_product_id, producto_interno_id } = req.body;
+    const { empresa_id, woocommerce_id, woo_product_id, producto_interno_id, nombre_producto, precio, producto_externo_nombre } = req.body;
 
     const existing = await WooProductMapping.getMappingById(id);
     if (!existing) {
@@ -91,6 +94,9 @@ exports.updateMapping = async (req, res) => {
       woocommerce_id,
       woo_product_id,
       producto_interno_id,
+      nombre_producto,
+      precio,
+      producto_externo_nombre
     });
 
     res.json({ message: 'Mapeo actualizado correctamente' });
@@ -133,7 +139,7 @@ exports.getProductoInternoByWoo = async (req, res) => {
       parseInt(woocommerce_id),
       parseInt(woo_product_id)
     );
-
+    console.log('Producto interno ID obtenido:', productoInternoId);
     if (productoInternoId) {
       res.json({ producto_interno_id: productoInternoId });
     } else {

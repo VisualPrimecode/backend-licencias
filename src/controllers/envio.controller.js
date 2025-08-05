@@ -42,14 +42,54 @@ exports.createEnvio = async (req, res) => {
   console.log('📦 Creando un nuevo envío...');
   console.log('Datos del envío:', req.body);
 
-  const empresaName = await getEmpresaNameById(req.body.empresa_id);
-  const productoName = await getProductoNameById(req.body.producto_id); // Asume que el nombre del producto se pasa directamente
-
-
   try {
+    // 🏢 Obtener nombres descriptivos
+    const empresaName = await getEmpresaNameById(req.body.empresa_id);
+    const productoName = await getProductoNameById(req.body.producto_id);
 
-    const plantilla = await Plantilla.getPlantillaByIdProductoWoo(req.body.producto_id,req.body.woocommerce_id);
-   // console.log('Plantilla encontrada:', plantilla);
+    // 🧩 Intentar obtener plantilla personalizada
+    let plantilla = await Plantilla.getPlantillaByIdProductoWoo(req.body.producto_id, req.body.woocommerce_id);
+
+    // 🧾 Si no existe plantilla personalizada, usar una por defecto
+    if (!plantilla) {
+      console.log('⚠️ No se encontró una plantilla personalizada. Usando plantilla por defecto.');
+      plantilla = {
+        id: null,
+        empresa_id: req.body.empresa_id,
+        producto_id: req.body.producto_id,
+        asunto: 'Gracias por tu compra',
+        encabezado: 'Gracias por confiar en nosotros',
+        cuerpo_html: `
+          <!DOCTYPE html>
+          <html lang="es">
+          <head>
+            <meta charset="UTF-8">
+            <title>Gracias por tu compra</title>
+          </head>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f8f8f8; padding: 20px;">
+            <div style="max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #ddd;">
+              <h2 style="color: #2b6cb0; text-align: center;">🎉 ¡Gracias por tu compra!</h2>
+              <p>Tu pedido ha sido recibido y procesado correctamente.</p>
+              <p>Pronto recibirás más información sobre la entrega o activación.</p>
+              <div style="margin-top: 20px; padding: 10px; background: #e6fffa; border: 1px solid #b2f5ea; border-radius: 5px;">
+                ¿Tienes dudas? Escríbenos a nuestro WhatsApp y con gusto te ayudamos.
+              </div>
+            </div>
+          </body>
+          </html>
+        `,
+        firma: 'Equipo de soporte',
+        logo_url: 'https://tusitio.com/logo-default.png',
+        idioma: 'es',
+        activa: 1,
+        creada_en: new Date(),
+        woo_id: req.body.woocommerce_id,
+        motivo: 'Plantilla por defecto',
+        validez_texto: 'Recuerda que este producto debe ser activado lo antes posible.'
+      };
+    }
+
+    // 📨 Preparar datos del envío
     const envioData = {
       ...req.body,
       estado: 'pendiente',
@@ -58,15 +98,17 @@ exports.createEnvio = async (req, res) => {
       productoName
     };
 
+    // 🔒 Validación básica
     if (!envioData.empresa_id || !envioData.usuario_id || !envioData.producto_id) {
       return res.status(400).json({
         error: 'Faltan campos obligatorios (empresa_id, usuario_id, producto_id)'
       });
     }
 
+    // 📝 Crear el envío en BD
     const id = await Envio.createEnvio(envioData);
 
-    // 📬 Obtener SMTP desde la BD
+    // 📬 Obtener configuración SMTP
     const config = await getSMTPConfigByStoreId(envioData.store_id || 3);
     if (!config) {
       return res.status(500).json({ error: 'No se encontró configuración SMTP activa' });
@@ -80,6 +122,7 @@ exports.createEnvio = async (req, res) => {
       pass: config.smtp_password
     };
 
+    // 📤 Encolar para envío posterior
     await envioQueue.add({
       id,
       ...envioData,
@@ -87,11 +130,14 @@ exports.createEnvio = async (req, res) => {
     });
 
     return res.status(201).json({ id });
+
   } catch (error) {
     console.error('❌ Error al crear envío:', error);
     return res.status(500).json({ error: 'Error al crear envío' });
   }
 };
+
+
 
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');

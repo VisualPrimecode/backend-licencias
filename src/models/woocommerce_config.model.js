@@ -12,15 +12,15 @@ const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
 
-    console.log("estructura de la api", api);
-    console.log("queryParams", queryParams);
+   // console.log("estructura de la api", api);
+ //   console.log("queryParams", queryParams);
 
     // ✅ CORRECTO: sin { params: ... }
     const response = await api.get("products", queryParams);
 
-    console.log("URL final:", response.config.url);
-    console.log("Base URL:", response.config.baseURL);
-    console.log("Params:", response.config.params);
+    //console.log("URL final:", response.config.url);
+    //console.log("Base URL:", response.config.baseURL);
+   // console.log("Params:", response.config.params);
 
     return response.data.map(product => ({
       id: product.id,

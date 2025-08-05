@@ -22,23 +22,51 @@ const getMappingByIdWoo = async (id) => {
 
 
 // Crear un nuevo mapeo
-const createMapping = async ({ empresa_id, woocommerce_id, woo_product_id, producto_interno_id }) => {
+const createMapping = async ({ empresa_id, woocommerce_id, woo_product_id, producto_interno_id, nombre_producto, precio, producto_externo_nombre }) => {
   const [result] = await db.query(
-    `INSERT INTO woo_product_mappings (empresa_id, woocommerce_id, woo_product_id, producto_interno_id)
-     VALUES (?, ?, ?, ?)`,
-    [empresa_id, woocommerce_id, woo_product_id, producto_interno_id]
+    `INSERT INTO woo_product_mappings (empresa_id, woocommerce_id, woo_product_id, producto_interno_id, nombre_producto, precio, nombre_producto_ext)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [empresa_id, woocommerce_id, woo_product_id, producto_interno_id, nombre_producto, precio, producto_externo_nombre]
   );
   return result.insertId;
 };
 
 // Actualizar un mapeo existente
-const updateMapping = async (id, { empresa_id, woocommerce_id, woo_product_id, producto_interno_id }) => {
+const updateMapping = async (id, {
+  empresa_id,
+  woocommerce_id,
+  woo_product_id,
+  producto_interno_id,
+  nombre_producto,
+  precio,
+  producto_externo_nombre
+}) => {
+  console.log('datos que llegan al modelo:', {
+    empresa_id,
+    woocommerce_id,
+    woo_product_id,
+    producto_interno_id,
+    nombre_producto,
+    precio,
+    producto_externo_nombre
+  });
+
   const [result] = await db.query(
     `UPDATE woo_product_mappings
-     SET empresa_id = ?, woocommerce_id = ?, woo_product_id = ?, producto_interno_id = ?
+     SET empresa_id = ?, woocommerce_id = ?, woo_product_id = ?, producto_interno_id = ?, nombre_producto = ?, precio = ?, nombre_producto_ext = ?
      WHERE id = ?`,
-    [empresa_id, woocommerce_id, woo_product_id, producto_interno_id, id]
+    [
+      empresa_id,
+      woocommerce_id,
+      woo_product_id,
+      producto_interno_id,
+      nombre_producto,
+      precio,
+      producto_externo_nombre,
+      id // <-- al final
+    ]
   );
+
   return result;
 };
 

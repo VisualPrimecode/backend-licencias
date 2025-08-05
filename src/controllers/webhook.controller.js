@@ -242,7 +242,7 @@ exports.pedidoCompletado = async (req, res) => {
 
     const woo_product_id = producto.product_id || null;
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-    const email_cliente = 'claudiorodriguez7778@gmail.com'; // 📧 Estático por pruebas
+    const email_cliente = 'cl.rodriguezo@duocuc.cl'; // 📧 Estático por pruebas
     const numero_pedido = data.number || data.id || null;
     const fecha_envio = data.date_paid || new Date().toISOString();
 
