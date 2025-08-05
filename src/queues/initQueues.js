@@ -1,7 +1,7 @@
 
 const envioQueue = require('./envioQueue');
 const cotizacionQueue = require('./cotizacionQueue');
-const envioProcessor = require('../workers/envioProcessor');
+const envioProcessor = require('../workers/envioProcessor2');
 const cotizacionProcessor = require('../workers/cotizacionProcessor2');
 
 cotizacionQueue.process(cotizacionProcessor);

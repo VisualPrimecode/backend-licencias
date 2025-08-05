@@ -59,13 +59,13 @@ const createTransporter = async (smtpConfig) => {
  * @param {string} params.text
  * @param {string} params.html
  */
-const sendEnvioCorreo = async ({ smtpConfig, to, subject, text, html }) => {
-    console.log('entro en el nuevo sendEnvioCorreo');
+const sendEnvioCorreo = async ({ smtpConfig, to, subject, text, html, nombreEmpresa }) => {
+  console.log('📧 Entrando en sendEnvioCorreo');
+
   const transporter = await createTransporter(smtpConfig);
-  //console.log('Transporter creado con configuración:', transporter);
 
   const mailOptions = {
-    from: `"Mi Empresa" <${smtpConfig.user}>`,
+    from: `"${nombreEmpresa || 'Mi Empresas'}" <${smtpConfig.user}>`,
     to,
     subject,
     text,
