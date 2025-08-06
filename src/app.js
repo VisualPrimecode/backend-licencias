@@ -3,6 +3,8 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const express = require('express');
+const cors = require('cors'); // <-- ⬅️ Agrega esta línea
+
 
 // 🔁 Importación de rutas
 
@@ -28,6 +30,8 @@ const cotizacionRoutes = require('./routes/cotizacion.routes');
 
 
 const app = express();
+app.use(cors()); // <-- ⬅️ Esta línea es clave
+
 app.use(express.json());
 
 // 📦 Rutas API

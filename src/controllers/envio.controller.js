@@ -170,6 +170,7 @@ async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
     validez_texto: 'Recuerda activar tu producto a la brevedad.'
   };
 }
+/*
 
 exports.createEnvio = async (req, res) => {
   console.log('📦 Creando nuevo envío multiproducto...');
@@ -212,13 +213,10 @@ exports.createEnvio = async (req, res) => {
         codigo,
         id_serial,
         nombre_producto,
-        plantilla
+        plantilla  // 👈 Aquí se guarda la plantilla por producto
       });
     }
 
-    // 🎨 Usar plantilla del primer producto como plantilla principal del envío
-    const plantillaPrincipal = productosProcesados[0]?.plantilla;
-    console.log('nombre de la empresa:', empresaName);
     const envioData = {
       empresa_id,
       usuario_id,
@@ -227,9 +225,9 @@ exports.createEnvio = async (req, res) => {
       numero_pedido,
       woocommerce_id,
       productos: productosProcesados,
-      plantilla: plantillaPrincipal,
       empresaName,
       estado: 'pendiente'
+      // ❌ plantilla: eliminado
     };
 
     // 📝 Crear envío en BD
@@ -249,7 +247,7 @@ exports.createEnvio = async (req, res) => {
       pass: config.smtp_password
     };
 
-    // 📤 Encolar envío
+    // 📤 Encolar envío con productos y sus plantillas
     await envioQueue.add({
       id,
       ...envioData,
@@ -262,10 +260,118 @@ exports.createEnvio = async (req, res) => {
     return res.status(500).json({ error: 'Error interno al crear envío' });
   }
 };
+*/
 
+exports.createEnvio = async (req, res) => {
+  console.log('📦 Creando nuevo envío multiproducto...');
+  console.log('Datos recibidos:', req.body);
 
+  try {
+    const {
+      empresa_id,
+      usuario_id,
+      productos,
+      woocommerce_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido
+    } = req.body;
 
+    // ✅ Validaciones básicas
+    if (
+      !empresa_id ||
+      !usuario_id ||
+      !Array.isArray(productos) ||
+      productos.length === 0
+    ) {
+      return res.status(400).json({
+        error: 'Faltan campos obligatorios o lista de productos vacía.'
+      });
+    }
 
+    const empresaName = await getEmpresaNameById(empresa_id);
+
+    const productosProcesados = [];
+
+    for (const producto of productos) {
+      const {
+        producto_id,
+        woo_producto_id,
+        nombre_producto,
+        seriales
+      } = producto;
+
+      // 🔎 Validar seriales
+      if (!Array.isArray(seriales) || seriales.length === 0) {
+        return res.status(400).json({
+          error: `El producto ${nombre_producto || producto_id} no contiene seriales válidos.`
+        });
+      }
+
+      // 🔎 Validar que cada serial tenga los campos requeridos
+      const serialesValidos = seriales.every(s => s.codigo && s.id_serial);
+      if (!serialesValidos) {
+        return res.status(400).json({
+          error: `Seriales inválidos en el producto ${nombre_producto || producto_id}.`
+        });
+      }
+
+      // 📄 Obtener plantilla asociada al producto
+      const plantilla = await getPlantillaConFallback(producto_id, woocommerce_id, empresa_id);
+
+      productosProcesados.push({
+        producto_id,
+        woo_producto_id,
+        nombre_producto,
+        plantilla,
+        seriales // ✅ Se guarda la lista completa de seriales
+      });
+    }
+
+    const envioData = {
+      empresa_id,
+      usuario_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      woocommerce_id,
+      productos: productosProcesados,
+      empresaName,
+      estado: 'pendiente'
+    };
+
+    // 📝 Crear envío en BD
+    const id = await Envio.createEnvio(envioData);
+
+    // 📬 Obtener configuración SMTP
+    const config = await getSMTPConfigByStoreId(woocommerce_id || 3);
+    if (!config) {
+      return res.status(500).json({
+        error: 'No se encontró configuración SMTP activa'
+      });
+    }
+
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+
+    // 📤 Encolar envío con productos y sus seriales + plantillas
+    await envioQueue.add({
+      id,
+      ...envioData,
+      smtpConfig
+    });
+
+    return res.status(201).json({ id });
+  } catch (error) {
+    console.error('❌ Error al crear envío multiproducto:', error);
+    return res.status(500).json({ error: 'Error interno al crear envío' });
+  }
+};
 
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');
