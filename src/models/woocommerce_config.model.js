@@ -252,7 +252,7 @@ if (fullNameMatch || emailMatch) {
 //pedidos para envio manual de pedidos
 const getPedidos = async (id, queryParams = {}) => {
   console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
-  console.log("queryParams recibidos:", queryParams);
+ // console.log("queryParams recibidos:", queryParams);
 
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
@@ -260,9 +260,9 @@ const getPedidos = async (id, queryParams = {}) => {
     // Pasamos los queryParams directamente
     const response = await api.get("orders", queryParams);
 
-    console.log("URL final:", response.config.url);
-    console.log("Base URL:", response.config.baseURL);
-    console.log("Params:", response.config.params);
+    //console.log("URL final:", response.config.url);
+    //console.log("Base URL:", response.config.baseURL);
+   // console.log("Params:", response.config.params);
 
     // Filtrar pedidos con estado "completed" o "processing"
     const completedOrders = response.data.filter(order =>

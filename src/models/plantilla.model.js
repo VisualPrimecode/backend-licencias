@@ -15,7 +15,9 @@ const getPlantillaById = async (id) => {
 
 // Obtener una plantilla por ID
 const getPlantillaByIdProductoWoo = async (producto_id, woo_id) => {
-  const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE producto_id = ? AND woo_id', [producto_id, woo_id]);
+  console.log('obteniendo plantillas para el producto', producto_id);
+  console.log('empresa u woo id = ', woo_id);
+  const [rows] = await db.query('SELECT * FROM plantillas_envio WHERE producto_id = ? AND woo_id = ?', [producto_id, woo_id]);
   return rows[0];
 };
 // Obtener una plantilla por ID de empresa
