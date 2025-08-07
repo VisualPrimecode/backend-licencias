@@ -1,5 +1,6 @@
 const WooConfig = require('../models/woocommerce_config.model');
 exports.getAllConfigs = async (req, res) => {
+  console.log('🔍 Obteniendo todas las configuraciones WooCommerce...');
   try {
     const configs = await WooConfig.getAllConfigs();
     res.json(configs);
@@ -29,6 +30,7 @@ exports.getAllConfigsWooProducts = async (req, res) => {
 
 //obtener todos los pedidos de un WooCommerce
 exports.getAllConfigsWooOrders = async (req, res) => {
+  console.log('🔍 Obteniendo pedidos WooCommerce...');
   try {
     const { id } = req.params;
     const queryParams = req.query; // ✅ Añadido: recoger los query params

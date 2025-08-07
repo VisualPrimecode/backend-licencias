@@ -62,6 +62,7 @@ const getProducts = async (id, queryParams = {}) => {
 */
 
 const getPedidoById = async (idConfig, pedidoId) => {
+  console.log(`🔍 Obteniendo pedido por ID: ${pedidoId} para la configuración ID: ${idConfig}`);
   if (!idConfig || !pedidoId) throw new Error("idConfig y pedidoId son requeridos");
 
   try {
@@ -76,7 +77,6 @@ const getPedidoById = async (idConfig, pedidoId) => {
       return null;
     }
 
-    // 🔥 Filtrar solo pedidos completados
     if (order.status !== 'completed') {
       console.log(`⚠️ Pedido ${pedidoId} no está completado (estado: ${order.status})`);
       return null;
@@ -90,12 +90,28 @@ const getPedidoById = async (idConfig, pedidoId) => {
       total: parseFloat(order.total || 0),
       date_created: order.date_created,
       payment_method: order.payment_method_title || order.payment_method,
-      products: (order.line_items || []).map(item => ({
-        product_id: item.product_id,
-        name: item.name,
-        quantity: item.quantity,
-        variation_id: item.variation_id || null
-      }))
+      products: (order.line_items || []).map(item => {
+        // Buscar en meta_data la entrada con key = _tmcartepo_data
+        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+        
+        // Mapear si existe
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: opt.price || 0
+            }))
+          : [];
+          console.log("extra_options", extraOptionData);
+
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options // <-- nuevas opciones extra aquí
+        };
+      })
     };
 
   } catch (error) {
@@ -121,7 +137,7 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
 
   try {
     const api = await model.getWooApiInstanceByConfigId(idConfig);
-    console.log("✅ Instancia de API obtenida");
+    //console.log("✅ Instancia de API obtenida");
 
     const now = new Date();
     const defaultStart = new Date();
@@ -177,26 +193,40 @@ const searchPedidos = async (idConfig, { name, email, startDate, endDate }) => {
 
         const fullNameMatch = targetFullName && fullName === targetFullName;
         const emailMatch = targetEmail && orderEmail === targetEmail;
+if (fullNameMatch || emailMatch) {
+  console.log("🎯 Coincidencia encontrada:", order.id);
 
-        if (fullNameMatch || emailMatch) {
-          console.log("🎯 Coincidencia encontrada:", order.id);
-          matches.push({
-            id: order.id,
-            customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
-            customer_email: order.billing.email,
-            status: order.status,
-            total: order.total,
-            date_created: order.date_created,
-            payment_method: order.payment_method_title || order.payment_method,
-            products: order.line_items.map(item => ({
-              product_id: item.product_id,
-              name: item.name,
-              quantity: item.quantity
-            }))
-          });
+  matches.push({
+    id: order.id,
+    customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+    customer_email: order.billing.email,
+    status: order.status,
+    total: order.total,
+    date_created: order.date_created,
+    payment_method: order.payment_method_title || order.payment_method,
+    products: order.line_items.map(item => {
+      // Buscar opciones extra en _tmcartepo_data
+      const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+      const extra_options = Array.isArray(extraOptionData?.value)
+        ? extraOptionData.value.map(opt => ({
+            name: opt.name,
+            value: opt.value,
+            price: opt.price || 0
+          }))
+        : [];
 
-          if (!stopRequesting) stopRequesting = true;
-        }
+      return {
+        product_id: item.product_id,
+        name: item.name,
+        quantity: item.quantity,
+        extra_options // <-- añadidas aquí
+      };
+    })
+  });
+
+  if (!stopRequesting) stopRequesting = true;
+}
+
       }
 
       if (orders.length < perPage * batchSize) {
@@ -226,7 +256,6 @@ const getPedidos = async (id, queryParams = {}) => {
 
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
-    console.log("Instancia de API obtenida:", api);
 
     // Pasamos los queryParams directamente
     const response = await api.get("orders", queryParams);
@@ -239,19 +268,34 @@ const getPedidos = async (id, queryParams = {}) => {
     const completedOrders = response.data.filter(order =>
       order.status === "completed" || order.status === "processing"
     );
-    
+
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
-      customer_name: `${order.billing.first_name} ${order.billing.last_name}`,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
       customer_email: order.billing.email,
       status: order.status,
-      total: order.total, // <-- Total del pedido
-      payment_method: order.payment_method_title || order.payment_method, // <-- Medio de pago
-      products: order.line_items.map(item => ({
-        product_id: item.product_id,
-        name: item.name,
-        quantity: item.quantity
-      }))
+      total: parseFloat(order.total || 0),
+      payment_method: order.payment_method_title || order.payment_method,
+      products: order.line_items.map(item => {
+        // Buscar en meta_data la entrada con key = _tmcartepo_data
+        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: opt.price || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      })
     }));
 
     return filteredOrders;
@@ -267,7 +311,7 @@ const getPedidosInforme = async (id, queryParams = {}) => {
 
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
-    console.log("Instancia de API obtenida:", api);
+   // console.log("Instancia de API obtenida:", api);
 
     // Pasamos los queryParams directamente
     const response = await api.get("orders", queryParams);

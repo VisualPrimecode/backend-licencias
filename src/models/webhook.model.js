@@ -77,7 +77,7 @@ const getWooApiInstanceByConfigId = async (configId) => {
     'SELECT * FROM woocommerce_api_config WHERE id = ?',
     [configId]
   );
-  console.log("rows", rows)
+  //console.log("rows", rows)
   if (rows.length === 0) {
     throw new Error(`No se encontró configuración de WooCommerce para config_id: ${configId}`);
   }
