@@ -41,6 +41,7 @@ exports.getEnvioById = async (req, res) => {
 
 async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
+
   if (plantilla) return plantilla;
 
   return {
@@ -73,28 +74,6 @@ async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
     validez_texto: 'Recuerda activar tu producto a la brevedad.'
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 exports.createEnvio = async (req, res) => {

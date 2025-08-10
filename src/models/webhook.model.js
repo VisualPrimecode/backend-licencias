@@ -140,35 +140,73 @@ const createWebhookInWoo = async ({ nombre, topic, url, id }) => {
     throw error;
   }
 };
-const getWebhookByIdFromWoo = async (id) => {
+/**
+ * Obtiene un webhook de WooCommerce por su ID
+ * @param {Object} params
+ * @param {number|string} params.id - ID del webhook
+ * @param {number|string} params.configId - ID para obtener config WooCommerce
+ */
+const getWebhookByIdFromWoo = async ({ id, configId }) => {
+  if (!id || !configId) {
+    throw new Error("Se requieren 'id' y 'configId' para obtener el webhook");
+  }
+
   try {
+    const api = await getWooApiInstanceByConfigId(configId);
     const response = await api.get(`webhooks/${id}`);
     return response.data;
   } catch (error) {
-    console.error(`Error obteniendo webhook ${id}:`, error.response?.data || error);
+    const { status, data } = error.response || {};
+    console.error(`Error obteniendo webhook ${id} (status: ${status}):`, data || error.message);
     throw error;
   }
 };
 
-const updateWebhookInWoo = async (id, data) => {
+/**
+ * Actualiza un webhook en WooCommerce
+ * @param {Object} params
+ * @param {number|string} params.id - ID del webhook
+ * @param {Object} params.data - Datos a actualizar
+ * @param {number|string} params.configId - ID para obtener config WooCommerce
+ */
+const updateWebhookInWoo = async ({ id, data, configId }) => {
+  if (!id || !data || !configId) {
+    throw new Error("Se requieren 'id', 'data' y 'configId' para actualizar el webhook");
+  }
+
   try {
+    const api = await getWooApiInstanceByConfigId(configId);
     const response = await api.put(`webhooks/${id}`, data);
     return response.data;
   } catch (error) {
-    console.error(`Error actualizando webhook ${id}:`, error.response?.data || error);
+    const { status, data: errData } = error.response || {};
+    console.error(`Error actualizando webhook ${id} (status: ${status}):`, errData || error.message);
     throw error;
   }
 };
 
-const deleteWebhookInWoo = async (id) => {
+/**
+ * Elimina un webhook en WooCommerce
+ * @param {Object} params
+ * @param {number|string} params.id - ID del webhook
+ * @param {number|string} params.configId - ID para obtener config WooCommerce
+ */
+const deleteWebhookInWoo = async ({ id, configId }) => {
+  if (!id || !configId) {
+    throw new Error("Se requieren 'id' y 'configId' para eliminar el webhook");
+  }
+
   try {
+    const api = await getWooApiInstanceByConfigId(configId);
     const response = await api.delete(`webhooks/${id}`, { force: true });
     return response.data;
   } catch (error) {
-    console.error(`Error eliminando webhook ${id}:`, error.response?.data || error);
+    const { status, data } = error.response || {};
+    console.error(`Error eliminando webhook ${id} (status: ${status}):`, data || error.message);
     throw error;
   }
 };
+
 
 module.exports = {
   getAllWebhooks,

@@ -4,7 +4,10 @@ const Serial = require('../models/serial.model');
 const WooProductMapping = require('../models/wooProductMapping.model');
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); 
+const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
+const Plantilla = require('../models/plantilla.model');
 
+const { getEmpresaNameById } = require('../models/empresa.model');
 
 
 // Obtener todos los webhooks
@@ -105,8 +108,6 @@ exports.createWebhook = async (req, res) => {
   }
 };
 
-
-
 exports.updateWebhook = async (req, res) => {
   try {
     const { id } = req.params;
@@ -130,27 +131,31 @@ exports.updateWebhook = async (req, res) => {
       inactivo: 'disabled',
       pausado: 'paused'
     };
-
     const estadoWoo = estadoWooMap[estado];
 
     if (!estadoWoo) {
       return res.status(400).json({ error: `Estado no válido: ${estado}` });
     }
 
-    // 1. Obtener el ID de WooCommerce asociado
+    // 1. Obtener el webhook local
     const localWebhook = await Webhook.getWebhookById(id);
-    if (!localWebhook || !localWebhook.woo_id) {
-      return res.status(404).json({ error: 'Webhook local no encontrado o sin ID de WooCommerce' });
+    if (!localWebhook || !localWebhook.woo_id || !localWebhook.config_id) {
+      return res.status(404).json({ error: 'Webhook local no encontrado o sin datos de WooCommerce' });
     }
 
     const woo_id = localWebhook.woo_id;
+    const configId = localWebhook.config_id;
 
     // 2. Actualizar en WooCommerce
-    const wooResponse = await Webhook.updateWebhookInWoo(woo_id, {
-      name: nombre,
-      topic: tema,
-      delivery_url: url_entrega,
-      status: estadoWoo
+    const wooResponse = await Webhook.updateWebhookInWoo({
+      id: woo_id,
+      data: {
+        name: nombre,
+        topic: tema,
+        delivery_url: url_entrega,
+        status: estadoWoo
+      },
+      configId
     });
 
     // 3. Actualizar en la base de datos local con el estado original (español)
@@ -179,21 +184,21 @@ exports.updateWebhook = async (req, res) => {
 };
 
 
-
 exports.deleteWebhook = async (req, res) => {
   try {
     const { id } = req.params;
 
     // 1. Obtener el webhook local
     const localWebhook = await Webhook.getWebhookById(id);
-    if (!localWebhook || !localWebhook.woo_id) {
-      return res.status(404).json({ error: 'Webhook no encontrado o sin ID de WooCommerce' });
+    if (!localWebhook || !localWebhook.woo_id || !localWebhook.config_id) {
+      return res.status(404).json({ error: 'Webhook no encontrado o sin datos de WooCommerce' });
     }
 
     const woo_id = localWebhook.woo_id;
+    const configId = localWebhook.config_id;
 
     // 2. Eliminar de WooCommerce
-    await Webhook.deleteWebhookInWoo(woo_id);
+    await Webhook.deleteWebhookInWoo({ id: woo_id, configId });
 
     // 3. Eliminar de la base de datos local
     const deleted = await Webhook.deleteWebhook(id);
@@ -208,14 +213,13 @@ exports.deleteWebhook = async (req, res) => {
     return res.status(500).json({ error: 'Error interno al eliminar webhook' });
   }
 };
-//obtener pedidos
+/*
 exports.pedidoCompletado = async (req, res) => {
   console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
 
   try {
     const wooId = req.params.wooId;
     const data = req.body;
-    console.log('llego hasta aqui0.6',wooId,'Y LA DATA ES:', data);
 
     if (!data || typeof data !== 'object') {
       console.warn('⚠️ Webhook sin cuerpo válido:', data);
@@ -299,7 +303,185 @@ if (yaExiste) {
     console.error('❌ Error al procesar webhook:', error);
     return res.status(500).json({ mensaje: 'Error interno al procesar el webhook' });
   }
+};*/
+
+async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
+  const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
+
+  if (plantilla) return plantilla;
+
+  return {
+    id: null,
+    empresa_id,
+    producto_id,
+    asunto: 'Gracias por tu compra',
+    encabezado: 'Gracias por confiar en nosotros',
+    cuerpo_html: `
+      <!DOCTYPE html>
+      <html lang="es">
+      <head>
+        <meta charset="UTF-8">
+        <title>Gracias por tu compra</title>
+      </head>
+      <body style="font-family: Arial, sans-serif; padding: 20px;">
+        <h2>🎉 ¡Gracias por tu compra!</h2>
+        <p>Tu pedido ha sido procesado correctamente.</p>
+        <p>Si tienes alguna duda, contáctanos por WhatsApp.</p>
+      </body>
+      </html>
+    `,
+    firma: 'Equipo de soporte',
+    logo_url: 'https://tusitio.com/logo-default.png',
+    idioma: 'es',
+    activa: 1,
+    creada_en: new Date(),
+    woo_id,
+    motivo: 'Plantilla por defecto',
+    validez_texto: 'Recuerda activar tu producto a la brevedad.'
+  };
+}
+exports.pedidoCompletado = async (req, res) => {
+  console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
+  console.log('id woo',req.params.wooId )
+
+  try {
+    const wooId = req.params.wooId;
+    const data = req.body;
+
+    // ✅ Validar cuerpo del webhook
+    if (!data || typeof data !== 'object') {
+      console.warn('⚠️ Webhook sin cuerpo válido:', data);
+      return res.status(400).json({ mensaje: 'Cuerpo del webhook inválido o vacío' });
+    }
+
+    // ✅ Solo procesar pedidos completados
+   if (data.status !== 'completed' && data.status !== 'processing') {
+  console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
+  return res.status(200).json({ mensaje: `Pedido ignorado, estado: ${data.status}` });
+}
+console.log('llegoaquiii');
+
+
+    // ✅ Obtener empresa y usuario asociado al WooCommerce
+    const empresaUsuario = await Empresa.getEmpresaYUsuarioByWooConfigId(wooId);
+    if (!empresaUsuario) {
+      return res.status(404).json({ mensaje: 'No se encontró empresa ni usuario para esta configuración WooCommerce' });
+    }
+      console.log("llegohastaaqui")
+    const empresa_id = empresaUsuario.id;
+    const usuario_id = empresaUsuario.usuario_id;
+
+    // ✅ Datos del cliente desde Woo
+    const billing = data.billing || {};
+    const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
+    //const email_cliente = billing.email || null;
+    const email_cliente = 'cl.rodriguezo@duocuc.cl';
+    const numero_pedido = data.number || data.id || null;
+    const fecha_envio = data.date_paid || new Date().toISOString();
+      console.log("llegohastaaqui2")
+
+    // ✅ Prevenir duplicados
+    const yaExiste = await Envio.existeEnvioPorPedidoWoo(numero_pedido, wooId);
+    if (yaExiste) {
+      console.warn(`📦 Pedido duplicado detectado (numero_pedido: ${numero_pedido}, woo_id: ${wooId})`);
+      return res.status(200).json({ mensaje: 'Pedido ya procesado anteriormente. Ignorado para evitar duplicado.' });
+    }
+
+    // ✅ Obtener nombre de empresa (igual que en createEnvio)
+    const empresaName = await getEmpresaNameById(empresa_id);
+
+    // ✅ Procesar productos del pedido
+    const productosProcesados = [];
+    const lineItems = Array.isArray(data.line_items) ? data.line_items : [];
+
+    if (lineItems.length === 0) {
+      return res.status(400).json({ mensaje: 'El pedido no contiene productos.' });
+    }
+      console.log("llegohastaaqui3")
+
+    for (const item of lineItems) {
+      const woo_producto_id = item.product_id;
+      const nombre_producto = item.name || null;
+
+      // 🔎 Mapear producto interno
+      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
+      if (!producto_id) {
+        return res.status(404).json({ mensaje: `Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno` });
+      }
+            console.log("llegohastaaqui5")
+
+      // 🔎 Obtener serial disponible
+     /* const serial = await Serial.obtenerSerialDisponible(producto_id, wooId);
+      if (!serial || !serial.id || !serial.codigo) {
+        return res.status(404).json({ mensaje: `No hay serial válido para el producto ${nombre_producto || producto_id}` });
+      }*/
+                  console.log("llegohastaaqui6")
+
+
+      // 📄 Obtener plantilla asociada
+      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+
+      // ✅ Agregar al array procesado (mismo formato que createEnvio)
+      productosProcesados.push({
+        producto_id,
+        woo_producto_id,
+        nombre_producto,
+        plantilla,
+        seriales: [
+          { id_serial: 170, codigo: 'jhjjhj' }
+        ]
+      });
+    }
+                  console.log("llegohastaaqui6")
+
+    // ✅ Construcción del objeto de envío (idéntico a createEnvio)
+    const envioData = {
+      empresa_id,
+      usuario_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      woocommerce_id: wooId,
+      productos: productosProcesados,
+      empresaName,
+      estado: 'pendiente',
+      fecha_envio
+    };
+
+    // 📝 Crear envío en BD
+    const id = await Envio.createEnvio(envioData);
+      // 📬 Obtener configuración SMTP
+    const config = await getSMTPConfigByStoreId( wooId || 3);
+    if (!config) {
+      return res.status(500).json({
+        error: 'No se encontró configuración SMTP activa'
+      });
+    }
+
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+
+    // 📤 Encolar envío
+    await envioQueue.add({
+      id,
+      ...envioData,
+      smtpConfig
+    });
+
+    console.log('✅ Envío creado y encolado exitosamente:', id);
+    return res.status(200).json({ mensaje: 'Webhook procesado correctamente ✅', envioId: id });
+
+  } catch (error) {
+    console.error('❌ Error al procesar webhook:', error);
+    return res.status(500).json({ mensaje: 'Error interno al procesar el webhook' });
+  }
 };
+
 
 
 
