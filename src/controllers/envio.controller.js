@@ -5,7 +5,7 @@ const Plantilla = require('../models/plantilla.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const { createCotizacion } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
-const { getProductoNameById } = require('../models/producto.model');
+const { getProductoInternoByNombreYWooId } = require('../models/wooProductMapping.model');
 
 
 // Obtener todos los envíos
@@ -41,38 +41,7 @@ exports.getEnvioById = async (req, res) => {
 
 async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
-
-  if (plantilla) return plantilla;
-
-  return {
-    id: null,
-    empresa_id,
-    producto_id,
-    asunto: 'Gracias por tu compra',
-    encabezado: 'Gracias por confiar en nosotros',
-    cuerpo_html: `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-        <meta charset="UTF-8">
-        <title>Gracias por tu compra</title>
-      </head>
-      <body style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>🎉 ¡Gracias por tu compra!</h2>
-        <p>Tu pedido ha sido procesado correctamente.</p>
-        <p>Si tienes alguna duda, contáctanos por WhatsApp.</p>
-      </body>
-      </html>
-    `,
-    firma: 'Equipo de soporte',
-    logo_url: 'https://tusitio.com/logo-default.png',
-    idioma: 'es',
-    activa: 1,
-    creada_en: new Date(),
-    woo_id,
-    motivo: 'Plantilla por defecto',
-    validez_texto: 'Recuerda activar tu producto a la brevedad.'
-  };
+  return plantilla || null; // ❌ Ya no hay plantilla por defecto
 }
 
 
@@ -108,6 +77,27 @@ exports.createEnvio = async (req, res) => {
     const productosProcesados = [];
 
     for (const producto of productos) {
+        console.log('📌 Extra options recibidos:', JSON.stringify(producto.extra_options, null, 2));
+
+  // 🆕 Procesar posibles productos extra en extra_options
+  if (Array.isArray(producto.extra_options)) {
+    const extrasCompraCon = producto.extra_options.filter(opt =>
+      typeof opt.name === 'string' &&
+      opt.name.toLowerCase().includes('compra con')
+    );
+
+    for (const extra of extrasCompraCon) {
+      const nombreExtraProducto = extra.value?.trim();
+      if (nombreExtraProducto) {
+        try {
+          const idInternoExtra = await getProductoInternoByNombreYWooId(nombreExtraProducto, woocommerce_id);
+          console.log(`🛒 Producto extra detectado: "${nombreExtraProducto}" → ID interno: ${idInternoExtra ?? 'No encontrado'}`);
+        } catch (err) {
+          console.error(`⚠️ Error buscando ID interno para producto extra "${nombreExtraProducto}":`, err.message);
+        }
+      }
+    }
+  }
       const {
         producto_id,
         woo_producto_id,
@@ -129,9 +119,18 @@ exports.createEnvio = async (req, res) => {
           error: `Seriales inválidos en el producto ${nombre_producto || producto_id}.`
         });
       }
+      console.log('va a entrar en el getplantillaconfallbavk')
 
       // 📄 Obtener plantilla asociada al producto
       const plantilla = await getPlantillaConFallback(producto_id, woocommerce_id, empresa_id);
+
+if (!plantilla) {
+  return res.status(400).json({
+    error: `No se encontró plantilla para el producto ${nombre_producto || producto_id}.`
+  });
+}
+
+      console.log('despues de getplantillaconfallbavk')
 
       productosProcesados.push({
         producto_id,

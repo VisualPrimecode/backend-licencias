@@ -76,20 +76,47 @@ const insertarSerialesMasivos = async (seriales) => {
 
 // Obtener un serial disponible por producto y woocommerce
 const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
+  const connection = await db.getConnection();
   try {
-    const [rows] = await db.query(
-      `SELECT id, codigo  FROM seriales 
-       WHERE producto_id = ? 
-         AND woocommerce_id = ? 
-         AND estado = 'disponible' 
-       ORDER BY fecha_ingreso ASC 
-       LIMIT 1`,
+    await connection.beginTransaction();
+
+    // 1. Seleccionar el primer serial disponible y bloquearlo
+    const [rows] = await connection.query(
+      `SELECT id, codigo
+       FROM seriales
+       WHERE producto_id = ?
+         AND woocommerce_id = ?
+         AND estado = 'disponible'
+       ORDER BY fecha_ingreso ASC
+       LIMIT 1
+       FOR UPDATE`,
       [producto_id, woocommerce_id]
     );
 
-    return rows[0]; // Devuelve el primer serial disponible, o undefined si no hay
+    if (rows.length === 0) {
+      await connection.rollback();
+      return undefined; // No hay serial disponible
+    }
+
+    const serial = rows[0];
+
+    // 2. Actualizar estado a "asignado"
+    await connection.query(
+      `UPDATE seriales
+       SET estado = 'asignado'
+       WHERE id = ?`,
+      [serial.id]
+    );
+
+    // 3. Confirmar la transacción
+    await connection.commit();
+
+    return serial; // Retorna el serial ya reservado
   } catch (error) {
-    throw new Error('Error al obtener serial disponible: ' + error.message);
+    await connection.rollback();
+    throw new Error('Error al obtener y asignar serial: ' + error.message);
+  } finally {
+    connection.release();
   }
 };
 

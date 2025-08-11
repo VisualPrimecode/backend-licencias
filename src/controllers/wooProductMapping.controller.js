@@ -150,3 +150,34 @@ exports.getProductoInternoByWoo = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener producto interno' });
   }
 };
+
+exports.getProductoInternoByNombreYWoo = async (req, res) => {
+  console.log('Iniciando solicitud para obtener producto interno por nombre y WooCommerce ID');
+
+  try {
+    const { nombre_producto, woocommerce_id } = req.query;
+
+    console.log('Parámetros recibidos:', { nombre_producto, woocommerce_id });
+
+    if (!nombre_producto || !woocommerce_id) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos: nombre_producto y woocommerce_id' });
+    }
+
+    const productoInternoId = await WooProductMapping.getProductoInternoByNombreYWooId(
+      nombre_producto,
+      parseInt(woocommerce_id)
+    );
+
+    console.log('Producto interno ID obtenido:', productoInternoId);
+
+    if (productoInternoId) {
+      res.json({ producto_interno_id: productoInternoId });
+    } else {
+      res.status(404).json({ error: 'No se encontró un producto interno para los datos proporcionados' });
+    }
+
+  } catch (error) {
+    console.error('❌ Error en getProductoInternoByNombreYWoo:', error.message);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+};

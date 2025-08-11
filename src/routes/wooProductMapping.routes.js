@@ -24,4 +24,6 @@ router.delete('/:id', mappingController.deleteMapping);
 
 router.get('/woo-product/producto-interno', mappingController.getProductoInternoByWoo);
 
+router.get('/woo-product/producto-interno-por-nombre', mappingController.getProductoInternoByNombreYWoo);
+
 module.exports = router;

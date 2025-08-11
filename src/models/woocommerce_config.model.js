@@ -77,10 +77,11 @@ const getPedidoById = async (idConfig, pedidoId) => {
       return null;
     }
 
-    if (order.status !== 'completed') {
-      console.log(`⚠️ Pedido ${pedidoId} no está completado (estado: ${order.status})`);
-      return null;
-    }
+   if (order.status !== 'completed' && order.status !== 'processing') {
+  console.log(`⚠️ Pedido ${pedidoId} no está completado ni en proceso (estado: ${order.status})`);
+  return null;
+}
+
 
     return {
       id: order.id,
@@ -102,7 +103,7 @@ const getPedidoById = async (idConfig, pedidoId) => {
               price: opt.price || 0
             }))
           : [];
-          console.log("extra_options", extraOptionData);
+         // console.log("extra_options", extraOptionData);
 
         return {
           product_id: item.product_id,
