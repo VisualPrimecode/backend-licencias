@@ -6,6 +6,8 @@ const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); 
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const Plantilla = require('../models/plantilla.model');
+const {createEnvioError} = require('../models/enviosErrores.model');
+
 
 const { getEmpresaNameById } = require('../models/empresa.model');
 
@@ -305,89 +307,113 @@ if (yaExiste) {
   }
 };*/
 
+
+// helpers/registrarEnvioError.js
+
+async function registrarEnvioError({
+  empresa_id = null,
+  usuario_id = null,
+  producto_id = null,
+  serial_id = null,
+  nombre_cliente = null,
+  email_cliente = null,
+  numero_pedido = null,
+  estado = 'fallido',
+  motivo_error = 'ERROR_DESCONOCIDO',
+  detalles_error = ''
+}) {
+  try {
+    await createEnvioError({
+      empresa_id,
+      usuario_id,
+      producto_id,
+      serial_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      estado,
+      motivo_error,
+      detalles_error
+    });
+  } catch (err) {
+    console.error('❌ No se pudo registrar el error en envios_errores:', err);
+  }
+}
+
+
 async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
-
-  if (plantilla) return plantilla;
-
-  return {
-    id: null,
-    empresa_id,
-    producto_id,
-    asunto: 'Gracias por tu compra',
-    encabezado: 'Gracias por confiar en nosotros',
-    cuerpo_html: `
-      <!DOCTYPE html>
-      <html lang="es">
-      <head>
-        <meta charset="UTF-8">
-        <title>Gracias por tu compra</title>
-      </head>
-      <body style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2>🎉 ¡Gracias por tu compra!</h2>
-        <p>Tu pedido ha sido procesado correctamente.</p>
-        <p>Si tienes alguna duda, contáctanos por WhatsApp.</p>
-      </body>
-      </html>
-    `,
-    firma: 'Equipo de soporte',
-    logo_url: 'https://tusitio.com/logo-default.png',
-    idioma: 'es',
-    activa: 1,
-    creada_en: new Date(),
-    woo_id,
-    motivo: 'Plantilla por defecto',
-    validez_texto: 'Recuerda activar tu producto a la brevedad.'
-  };
+  return plantilla || null; // ❌ Ya no hay plantilla por defecto
 }
+
+
 exports.pedidoCompletado = async (req, res) => {
   console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
-  console.log('id woo',req.params.wooId )
+  console.log('id woo', req.params.wooId);
+
+  const wooId = req.params.wooId;
+  const data = req.body;
 
   try {
-    const wooId = req.params.wooId;
-    const data = req.body;
-
     // ✅ Validar cuerpo del webhook
     if (!data || typeof data !== 'object') {
+      await registrarEnvioError({
+        woo_config_id: wooId,
+        motivo_error: 'INVALID_PAYLOAD',
+        detalles_error: JSON.stringify(data)
+      });
       console.warn('⚠️ Webhook sin cuerpo válido:', data);
       return res.status(400).json({ mensaje: 'Cuerpo del webhook inválido o vacío' });
     }
 
-    // ✅ Solo procesar pedidos completados
-   if (data.status !== 'completed' && data.status !== 'processing') {
-  console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
-  return res.status(200).json({ mensaje: `Pedido ignorado, estado: ${data.status}` });
-}
-console.log('llegoaquiii');
-
+    // ✅ Solo procesar pedidos completados o en procesamiento
+    if (data.status !== 'completed' && data.status !== 'processing') {
+      await registrarEnvioError({
+        woo_config_id: wooId,
+        numero_pedido: data.number || null,
+        motivo_error: 'IGNORED_STATUS',
+        detalles_error: `Estado recibido: ${data.status}`
+      });
+      console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
+      return res.status(200).json({ mensaje: `Pedido ignorado, estado: ${data.status}` });
+    }
 
     // ✅ Obtener empresa y usuario asociado al WooCommerce
     const empresaUsuario = await Empresa.getEmpresaYUsuarioByWooConfigId(wooId);
     if (!empresaUsuario) {
+      await registrarEnvioError({
+        woo_config_id: wooId,
+        numero_pedido: data.number || null,
+        motivo_error: 'EMPRESA_NO_ENCONTRADA'
+      });
       return res.status(404).json({ mensaje: 'No se encontró empresa ni usuario para esta configuración WooCommerce' });
     }
-      console.log("llegohastaaqui")
+
     const empresa_id = empresaUsuario.id;
     const usuario_id = empresaUsuario.usuario_id;
 
-    // ✅ Datos del cliente desde Woo
+    // ✅ Datos del cliente
     const billing = data.billing || {};
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-    //const email_cliente = billing.email || null;
-    const email_cliente = 'cl.rodriguezo@duocuc.cl';
+   // const email_cliente = billing.email || null; // quitar hardcode
+   const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
     const numero_pedido = data.number || data.id || null;
     const fecha_envio = data.date_paid || new Date().toISOString();
-      console.log("llegohastaaqui2")
 
     // ✅ Prevenir duplicados
     const yaExiste = await Envio.existeEnvioPorPedidoWoo(numero_pedido, wooId);
     if (yaExiste) {
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'PEDIDO_DUPLICADO'
+      });
       console.warn(`📦 Pedido duplicado detectado (numero_pedido: ${numero_pedido}, woo_id: ${wooId})`);
       return res.status(200).json({ mensaje: 'Pedido ya procesado anteriormente. Ignorado para evitar duplicado.' });
     }
 
-    // ✅ Obtener nombre de empresa (igual que en createEnvio)
+    // ✅ Obtener nombre de empresa
     const empresaName = await getEmpresaNameById(empresa_id);
 
     // ✅ Procesar productos del pedido
@@ -395,9 +421,14 @@ console.log('llegoaquiii');
     const lineItems = Array.isArray(data.line_items) ? data.line_items : [];
 
     if (lineItems.length === 0) {
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'SIN_PRODUCTOS'
+      });
       return res.status(400).json({ mensaje: 'El pedido no contiene productos.' });
     }
-      console.log("llegohastaaqui3")
 
     for (const item of lineItems) {
       const woo_producto_id = item.product_id;
@@ -406,35 +437,38 @@ console.log('llegoaquiii');
       // 🔎 Mapear producto interno
       const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
       if (!producto_id) {
+        await registrarEnvioError({
+          empresa_id,
+          usuario_id,
+          numero_pedido,
+          motivo_error: 'PRODUCTO_NO_MAPEADO',
+          detalles_error: `Woo product ID: ${woo_producto_id}`
+        });
         return res.status(404).json({ mensaje: `Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno` });
       }
-            console.log("llegohastaaqui5")
+console.log("llego hasta aquii109")
 
-      // 🔎 Obtener serial disponible
-     /* const serial = await Serial.obtenerSerialDisponible(producto_id, wooId);
+      const serial = await Serial.obtenerSerialDisponible(producto_id, wooId);
       if (!serial || !serial.id || !serial.codigo) {
-        return res.status(404).json({ mensaje: `No hay serial válido para el producto ${nombre_producto || producto_id}` });
-      }*/
-                  console.log("llegohastaaqui6")
-
-
+        return res.status(404).json({ mensaje: `No hay serial válido para el producto ${nombre_producto || producto_id}` })
+      };
       // 📄 Obtener plantilla asociada
       const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+console.log("llego hasta aquii110")
 
-      // ✅ Agregar al array procesado (mismo formato que createEnvio)
+      // ✅ Agregar al array procesado
       productosProcesados.push({
         producto_id,
         woo_producto_id,
         nombre_producto,
         plantilla,
-        seriales: [
-          { id_serial: 170, codigo: 'jhjjhj' }
+         seriales: [
+          { id_serial: serial.id, codigo: serial.codigo }
         ]
       });
     }
-                  console.log("llegohastaaqui6")
 
-    // ✅ Construcción del objeto de envío (idéntico a createEnvio)
+    // ✅ Construcción del objeto de envío
     const envioData = {
       empresa_id,
       usuario_id,
@@ -449,10 +483,29 @@ console.log('llegoaquiii');
     };
 
     // 📝 Crear envío en BD
-    const id = await Envio.createEnvio(envioData);
-      // 📬 Obtener configuración SMTP
-    const config = await getSMTPConfigByStoreId( wooId || 3);
+    let id;
+    try {
+      id = await Envio.createEnvio(envioData);
+    } catch (err) {
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'DB_ERROR',
+        detalles_error: err.message
+      });
+      throw err; // se captura en el catch principal
+    }
+
+    // 📬 Obtener configuración SMTP
+    const config = await getSMTPConfigByStoreId(wooId || 3);
     if (!config) {
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'SMTP_CONFIG_MISSING'
+      });
       return res.status(500).json({
         error: 'No se encontró configuración SMTP activa'
       });
@@ -467,20 +520,38 @@ console.log('llegoaquiii');
     };
 
     // 📤 Encolar envío
-    await envioQueue.add({
-      id,
-      ...envioData,
-      smtpConfig
-    });
+    try {
+      await envioQueue.add({
+        id,
+        ...envioData,
+        smtpConfig
+      });
+    } catch (err) {
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'ENQUEUE_FAIL',
+        detalles_error: err.message
+      });
+      throw err;
+    }
 
     console.log('✅ Envío creado y encolado exitosamente:', id);
     return res.status(200).json({ mensaje: 'Webhook procesado correctamente ✅', envioId: id });
 
   } catch (error) {
+    await registrarEnvioError({
+      woo_config_id: wooId,
+      numero_pedido: data?.number || null,
+      motivo_error: 'UNEXPECTED_EXCEPTION',
+      detalles_error: error.stack || error.message
+    });
     console.error('❌ Error al procesar webhook:', error);
     return res.status(500).json({ mensaje: 'Error interno al procesar el webhook' });
   }
 };
+
 
 
 

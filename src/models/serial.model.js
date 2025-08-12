@@ -99,17 +99,9 @@ const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
     }
 
     const serial = rows[0];
+        await connection.commit();
 
-    // 2. Actualizar estado a "asignado"
-    await connection.query(
-      `UPDATE seriales
-       SET estado = 'asignado'
-       WHERE id = ?`,
-      [serial.id]
-    );
-
-    // 3. Confirmar la transacción
-    await connection.commit();
+    
 
     return serial; // Retorna el serial ya reservado
   } catch (error) {

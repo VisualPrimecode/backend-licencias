@@ -4,6 +4,9 @@ const path = require('path');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
+const {createEnvioError} = require('../models/enviosErrores.model');
+
+
 // Obtener todos los seriales
 exports.getSeriales = async (req, res) => {
   try {
@@ -232,6 +235,8 @@ exports.previsualizarSeriales = async (req, res) => {
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
 };
+
+/*
 exports.obtenerSerialDisponible = async (req, res) => {
   console.log('Iniciando solicitud para obtener serial disponible');
   try {
@@ -246,12 +251,119 @@ exports.obtenerSerialDisponible = async (req, res) => {
     const serial = await Serial.obtenerSerialDisponible(producto_id, woocommerce_id);
     console.log('Serial obtenido:', serial);
     if (!serial) {
+      
       return res.status(404).json({ error: 'No hay seriales disponibles para este producto y woocommerce' });
     }
 
     res.status(200).json(serial);
   } catch (error) {
     console.error('❌ Error en obtenerSerialDisponible:', error);
+    res.status(500).json({ error: 'Error al obtener serial disponible' });
+  }
+};*/
+async function registrarErrorEnvio({ reqBody, motivo_error, detalles_error }) {
+  console.log("Intento de crear registro de error...");
+  console.log(reqBody);
+  console.log(motivo_error);
+  console.log(detalles_error);
+  try {
+    const {
+      empresa_id,
+      usuario_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      numeroPedido, // <-- soportar camelCase
+      producto_id
+    } = reqBody;
+
+    await createEnvioError({
+      empresa_id,
+      usuario_id,
+      producto_id: producto_id || null, // <-- ahora también guarda producto
+      serial_id: null, // no disponible en este flujo
+      nombre_cliente,
+      email_cliente,
+      numero_pedido: numero_pedido || numeroPedido || null, // soporta ambas formas
+      motivo_error,
+      detalles_error
+    });
+  } catch (err) {
+    console.error("⚠️ No se pudo registrar el error en BD:", err.message);
+  }
+}
+
+
+exports.obtenerSerialDisponible = async (req, res) => {
+  console.log('Iniciando solicitud para obtener serial disponible');
+  try {
+    // Desestructurar y normalizar el nombre
+    const { producto_id, woocommerce_id, numeroPedido } = req.body;
+    const numero_pedido = numeroPedido; // alias para mantener consistencia
+
+    console.log(req.body);
+    console.log('Producto ID:', producto_id);
+    console.log('WooCommerce ID:', woocommerce_id);
+    console.log('Número de pedido:', numero_pedido);
+
+    // Validación básica
+    if (!producto_id || !woocommerce_id) {
+      await registrarErrorEnvio({
+        reqBody: {
+          empresa_id: null,
+          usuario_id: null,
+          nombre_cliente: null,
+          email_cliente: null,
+          numero_pedido,
+          producto_id // <-- añadir aquí
+
+        },
+        motivo_error: 'Validación inicial fallida',
+        detalles_error: 'producto_id y woocommerce_id son requeridos'
+      });
+      return res.status(400).json({ error: 'producto_id y woocommerce_id son requeridos' });
+    }
+
+    const serial = await Serial.obtenerSerialDisponible(producto_id, woocommerce_id);
+    console.log('Serial obtenido:', serial);
+
+    if (!serial) {
+      console.log("Número de pedido sin serial disponible:", numero_pedido);
+      await registrarErrorEnvio({
+        reqBody: {
+          empresa_id: null,
+          usuario_id: null,
+          nombre_cliente: null,
+          email_cliente: null,
+          numero_pedido,
+          producto_id // <-- añadir aquí
+
+        },
+        motivo_error: 'Serial no disponible',
+        detalles_error: `No hay seriales disponibles para producto_id=${producto_id} y woocommerce_id=${woocommerce_id}`
+      });
+      return res.status(404).json({ error: 'No hay seriales disponibles para este producto y woocommerce' });
+    }
+
+    res.status(200).json(serial);
+
+  } catch (error) {
+    console.error('❌ Error en obtenerSerialDisponible:', error);
+
+    await registrarErrorEnvio({
+      reqBody: {
+        empresa_id: null,
+        usuario_id: null,
+        nombre_cliente: null,
+        email_cliente: null,
+        numero_pedido: req.body.numeroPedido, // aquí también corregido,
+        producto_id // <-- añadir aquí
+
+      },
+      motivo_error: 'Error interno en obtenerSerialDisponible',
+      detalles_error: error.message
+    });
+
     res.status(500).json({ error: 'Error al obtener serial disponible' });
   }
 };

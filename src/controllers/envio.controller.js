@@ -6,6 +6,7 @@ const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const { createCotizacion } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
 const { getProductoInternoByNombreYWooId } = require('../models/wooProductMapping.model');
+const {createEnvioError} = require('../models/enviosErrores.model');
 
 
 // Obtener todos los envíos
@@ -37,14 +38,184 @@ exports.getEnvioById = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener envío' });
   }
 };
-
-
 async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
   return plantilla || null; // ❌ Ya no hay plantilla por defecto
 }
 
+// 🔹 Helper para registrar errores
+async function registrarErrorEnvio({ reqBody, motivo_error, detalles_error }) {
+  console.log("intento crea registro de registrar envio");
+  console.log("datos", reqBody);
 
+  try {
+    const {
+      empresa_id,
+      usuario_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      productos
+    } = reqBody;
+
+    // Si existe al menos un producto, tomamos su ID para registrar
+    const primerProducto = Array.isArray(productos) && productos.length > 0 ? productos[0] : {};
+    
+    await createEnvioError({
+      empresa_id,
+      usuario_id,
+      producto_id: primerProducto.producto_id || null,
+      serial_id: primerProducto.seriales?.[0]?.id || null,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido: numero_pedido || null,
+      motivo_error,
+      detalles_error
+    });
+
+  } catch (err) {
+    console.error("⚠️ No se pudo registrar el error en BD:", err.message);
+  }
+}
+
+// 🔹 Ahora es async para poder registrar errores
+async function validarDatosEntrada(body) {
+  const { empresa_id, usuario_id, productos } = body;
+  if (!empresa_id || !usuario_id || !Array.isArray(productos) || productos.length === 0) {
+    await registrarErrorEnvio({
+      reqBody: body,
+      motivo_error: 'Validación inicial fallida',
+      detalles_error: 'Faltan campos obligatorios o lista de productos vacía'
+    });
+    throw new Error('Faltan campos obligatorios o lista de productos vacía.');
+  }
+}
+
+// 🔹 validarSeriales ahora recibe reqBody y es async
+async function validarSeriales(seriales, nombreProducto, reqBody) {
+  if (!Array.isArray(seriales) || seriales.length === 0) {
+    await registrarErrorEnvio({
+      reqBody,
+      motivo_error: 'Validación de seriales',
+      detalles_error: `El producto ${nombreProducto} no contiene seriales válidos.`
+    });
+    throw new Error(`El producto ${nombreProducto} no contiene seriales válidos.`);
+  }
+  if (!seriales.every(s => s.codigo && s.id_serial)) {
+    await registrarErrorEnvio({
+      reqBody,
+      motivo_error: 'Validación de seriales',
+      detalles_error: `Seriales inválidos en el producto ${nombreProducto}.`
+    });
+    throw new Error(`Seriales inválidos en el producto ${nombreProducto}.`);
+  }
+}
+
+// 🔹 procesarProducto ahora recibe reqBody y lo pasa a validarSeriales
+async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody) {
+  const { producto_id, woo_producto_id, nombre_producto, seriales } = producto;
+
+  await validarSeriales(seriales, nombre_producto || producto_id, reqBody);
+
+  const plantilla = await getPlantillaConFallback(producto_id, woocommerce_id, empresa_id);
+  if (!plantilla) {
+   
+    throw new Error(`No se encontró plantilla para el producto ${nombre_producto || producto_id}.`);
+  }
+
+  await procesarProductosExtra(producto.extra_options, woocommerce_id);
+
+  return { producto_id, woo_producto_id, nombre_producto, plantilla, seriales };
+}
+
+// 🔹 resto de funciones auxiliares sin cambios
+async function procesarProductosExtra(extraOptions, woocommerce_id) {
+  if (!Array.isArray(extraOptions)) return;
+
+  const extrasCompraCon = extraOptions.filter(opt =>
+    typeof opt.name === 'string' &&
+    opt.name.toLowerCase().includes('compra con')
+  );
+
+  for (const extra of extrasCompraCon) {
+    const nombreExtraProducto = extra.value?.trim();
+    if (nombreExtraProducto) {
+      try {
+        const idInternoExtra = await getProductoInternoByNombreYWooId(nombreExtraProducto, woocommerce_id);
+        console.log(`🛒 Producto extra detectado: "${nombreExtraProducto}" → ID interno: ${idInternoExtra ?? 'No encontrado'}`);
+      } catch (err) {
+        console.error(`⚠️ Error buscando ID interno para producto extra "${nombreExtraProducto}":`, err.message);
+      }
+    }
+  }
+}
+
+async function obtenerSMTPConfig(woocommerce_id) {
+  const config = await getSMTPConfigByStoreId(woocommerce_id || 3);
+  if (!config) {
+    throw new Error('No se encontró configuración SMTP activa');
+  }
+
+  return {
+    host: config.smtp_host,
+    port: config.smtp_port,
+    secure: !!config.smtp_secure,
+    user: config.smtp_username,
+    pass: config.smtp_password
+  };
+}
+
+// 🔹 Controlador principal con registro de errores en el catch
+exports.createEnvio = async (req, res) => {
+  console.log('📦 Creando nuevo envío multiproducto...', req.body);
+
+  try {
+    await validarDatosEntrada(req.body);
+
+    const { empresa_id, usuario_id, productos, woocommerce_id, nombre_cliente, email_cliente, numero_pedido } = req.body;
+
+    const empresaName = await getEmpresaNameById(empresa_id);
+
+    const productosProcesados = [];
+    for (const producto of productos) {
+      const procesado = await procesarProducto(producto, woocommerce_id, empresa_id, req.body);
+      productosProcesados.push(procesado);
+    }
+
+    const envioData = {
+      empresa_id,
+      usuario_id,
+      nombre_cliente,
+      email_cliente,
+      numero_pedido,
+      woocommerce_id,
+      productos: productosProcesados,
+      empresaName,
+      estado: 'pendiente'
+    };
+
+    const id = await Envio.createEnvio(envioData);
+
+    const smtpConfig = await obtenerSMTPConfig(woocommerce_id);
+    await envioQueue.add({ id, ...envioData, smtpConfig });
+
+    return res.status(201).json({ id });
+
+  } catch (error) {
+    console.error('❌ Error al crear envío multiproducto:', error);
+    // 📌 Registro de error global
+    await registrarErrorEnvio({
+      reqBody: req.body,
+      motivo_error: 'Error en createEnvio',
+      detalles_error: error.message,
+    });
+
+    return res.status(400).json({ error: error.message || 'Error interno al crear envío' });
+  }
+};
+
+
+/*
 exports.createEnvio = async (req, res) => {
   console.log('📦 Creando nuevo envío multiproducto...');
   console.log('Datos recibidos:', req.body);
@@ -156,6 +327,8 @@ if (!plantilla) {
     // 📝 Crear envío en BD
     const id = await Envio.createEnvio(envioData);
 
+    console.log("id del pedido ? = ", id);
+
     // 📬 Obtener configuración SMTP
     const config = await getSMTPConfigByStoreId(woocommerce_id || 3);
     if (!config) {
@@ -163,7 +336,7 @@ if (!plantilla) {
         error: 'No se encontró configuración SMTP activa'
       });
     }
-
+    console.log("hastaaca");
     const smtpConfig = {
       host: config.smtp_host,
       port: config.smtp_port,
@@ -178,13 +351,14 @@ if (!plantilla) {
       ...envioData,
       smtpConfig
     });
+        console.log("hastaaca2");
 
     return res.status(201).json({ id });
   } catch (error) {
     console.error('❌ Error al crear envío multiproducto:', error);
     return res.status(500).json({ error: 'Error interno al crear envío' });
   }
-};
+};*/
 
 
 
