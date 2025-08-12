@@ -112,6 +112,51 @@ const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
   }
 };
 
+const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Seleccionar el primer serial disponible y bloquearlo
+    const [rows] = await connection.query(
+      `SELECT id, codigo
+       FROM seriales
+       WHERE producto_id = ?
+         AND woocommerce_id = ?
+         AND estado = 'disponible'
+       ORDER BY fecha_ingreso ASC
+       LIMIT 1
+       FOR UPDATE`,
+      [producto_id, woocommerce_id]
+    );
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return undefined; // No hay serial disponible
+    }
+
+    const serial = rows[0];
+
+       await connection.query(
+      `UPDATE seriales
+       SET estado = 'asignado'
+       WHERE id = ?`,
+      [serial.id]
+    );
+
+    // 3. Confirmar la transacción
+        await connection.commit();
+
+    
+
+    return serial; // Retorna el serial ya reservado
+  } catch (error) {
+    await connection.rollback();
+    throw new Error('Error al obtener y asignar serial: ' + error.message);
+  } finally {
+    connection.release();
+  }
+};
 module.exports = {
   getAllSeriales,
   getSerialById,
@@ -119,5 +164,8 @@ module.exports = {
   updateSerial,
   deleteSerial,
   insertarSerialesMasivos,
-  obtenerSerialDisponible
+  obtenerSerialDisponible,
+    obtenerSerialDisponible2,
+
+
 };

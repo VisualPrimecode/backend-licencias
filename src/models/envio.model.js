@@ -26,6 +26,8 @@ const createEnvio = async ({
   woocommerce_id,
   woo_producto_id
 }) => {
+  
+
   const timestamp = fecha_envio || new Date(); // ⏱️ usa timestamp actual si no se pasa fecha_envio
 
   const [result] = await db.query(
@@ -126,7 +128,7 @@ const getEstadoEnvio = async (wooId, numeroPedido) => {
     if (rows.length === 0) {
       return null; // No encontrado
     }
-
+   // console.log("estado",rows[0].estado);
     return rows[0].estado;
   } catch (err) {
     throw new Error('Error al consultar estado de envío: ' + err.message);

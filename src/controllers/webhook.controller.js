@@ -396,7 +396,7 @@ exports.pedidoCompletado = async (req, res) => {
     const billing = data.billing || {};
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
    // const email_cliente = billing.email || null; // quitar hardcode
-   const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
+   const email_cliente = 'dtorres@cloudi.cl'; 
     const numero_pedido = data.number || data.id || null;
     const fecha_envio = data.date_paid || new Date().toISOString();
 
@@ -448,7 +448,7 @@ exports.pedidoCompletado = async (req, res) => {
       }
 console.log("llego hasta aquii109")
 
-      const serial = await Serial.obtenerSerialDisponible(producto_id, wooId);
+      const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId);
       if (!serial || !serial.id || !serial.codigo) {
         return res.status(404).json({ mensaje: `No hay serial válido para el producto ${nombre_producto || producto_id}` })
       };
