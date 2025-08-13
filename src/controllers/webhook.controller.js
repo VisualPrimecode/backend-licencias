@@ -341,37 +341,56 @@ async function registrarEnvioError({
 }
 
 async function validarPedidoWebhook(data, wooId, registrarEnvioError) {
-  // 1. Validar cuerpo del webhook
-  if (!data || typeof data !== 'object') {
-    console.log('data invalida:', data);
-    console.warn('⚠️ Webhook sin cuerpo válido:', data);
+  // 1. Detectar payload vacío o test de conexión
+  if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
+    console.warn(`⚠️ Webhook vacío recibido (wooId: ${wooId}) → probablemente test de WooCommerce`);
 
-    // Lanza un error con código y mensaje
-    const err = new Error('Cuerpo del webhook inválido o vacío');
-    err.statusCode = 400;
+    // No registrar como error, solo loguear
+    const err = new Error('Webhook vacío o test de conexión');
+    err.statusCode = 200;
+    err.isIgnored = true; // para que el controlador sepa ignorarlo
     throw err;
   }
 
-  // 2. Validar estado del pedido
-  if (data.status !== 'completed' && data.status !== 'processing') {
+  // 2. Detectar si faltan campos críticos (por ejemplo, numero de pedido o status)
+  if (!data.number || !data.status) {
+    console.warn(`⚠️ Webhook incompleto recibido (wooId: ${wooId})`, data);
+
+    // Registrar como "ignorado" pero no como error real
     await registrarEnvioError({
       woo_config_id: wooId,
       numero_pedido: data.number || null,
-      motivo_error: 'IGNORED_STATUS',
-      detalles_error: `Estado recibido: ${data.status}`
+      motivo_error: 'INCOMPLETE_PAYLOAD',
+      detalles_error: 'Payload incompleto o sin número de pedido/estado'
     });
-    console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
 
-    // Error controlado para que el controlador pueda responder 200
-    const err = new Error(`Pedido ignorado, estado: ${data.status}`);
+    const err = new Error('Webhook incompleto');
     err.statusCode = 200;
-    err.isIgnored = true; // Para distinguirlo de errores reales
+    err.isIgnored = true;
     throw err;
   }
 
-  // 3. Retornar el status si es válido
+  // 3. Validar estado del pedido
+  if (data.status !== 'completed' && data.status !== 'processing') {
+    await registrarEnvioError({
+      woo_config_id: wooId,
+      numero_pedido: data.number,
+      motivo_error: 'IGNORED_STATUS',
+      detalles_error: `Estado recibido: ${data.status}`
+    });
+
+    console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
+
+    const err = new Error(`Pedido ignorado, estado: ${data.status}`);
+    err.statusCode = 200;
+    err.isIgnored = true;
+    throw err;
+  }
+
+  // 4. Si todo es válido, continuar
   return data.status;
 }
+
 async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, registrarEnvioError) {
   const yaExiste = await Envio.existeEnvioPorPedidoWoo(numero_pedido, wooId);
 
