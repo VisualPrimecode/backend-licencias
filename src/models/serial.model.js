@@ -73,7 +73,7 @@ const insertarSerialesMasivos = async (seriales) => {
     throw err;
   }
 };
-
+/*
 // Obtener un serial disponible por producto y woocommerce
 const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
   const connection = await db.getConnection();
@@ -110,7 +110,55 @@ const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
   } finally {
     connection.release();
   }
+};*/
+// Obtener varios seriales disponibles y marcarlos como reservados
+const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad, numero_pedido) => {
+  const connection = await db.getConnection();
+console.log("entro a obtener seriales");
+  try {
+    await connection.beginTransaction();
+
+    // 1. Seleccionar N seriales disponibles y bloquearlos
+    const [rows] = await connection.query(
+      `SELECT id, codigo
+       FROM seriales
+       WHERE producto_id = ?
+         AND woocommerce_id = ?
+         AND estado = 'disponible'
+       ORDER BY fecha_ingreso ASC
+       LIMIT ?
+       FOR UPDATE`,
+      [producto_id, woocommerce_id, cantidad]
+    );
+    console.log("numerp de registros", rows.length);
+
+    if (rows.length < cantidad) {
+      await connection.rollback();
+      return undefined; // No hay suficientes seriales
+    }
+
+    const idsSeriales = rows.map(s => s.id);
+    console.log(idsSeriales);
+    // 2. Actualizar estado inmediatamente a 'reservado'
+    await connection.query(
+      `UPDATE seriales
+       SET estado = 'asignado', observaciones = ?
+       WHERE id IN (?)`,
+      [`Reservado para pedido ${numero_pedido}`, idsSeriales]
+    );
+
+    await connection.commit();
+
+    return rows; // Devuelve los seriales ya reservados
+
+  } catch (error) {
+    await connection.rollback();
+    throw new Error('Error al obtener y reservar seriales: ' + error.message);
+  } finally {
+    connection.release();
+  }
 };
+
 
 const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
   const connection = await db.getConnection();
@@ -138,7 +186,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
     const serial = rows[0];
 
        await connection.query(
-      `UPDATE seriales
+      `UPDATE serialesAux
        SET estado = 'asignado'
        WHERE id = ?`,
       [serial.id]
@@ -164,7 +212,7 @@ module.exports = {
   updateSerial,
   deleteSerial,
   insertarSerialesMasivos,
-  obtenerSerialDisponible,
+  obtenerSerialesDisponibles,
     obtenerSerialDisponible2,
 
 

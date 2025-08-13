@@ -73,6 +73,7 @@ exports.createSerial = async (req, res) => {
 
 // Actualizar un serial
 exports.updateSerial = async (req, res) => {
+  console.log("entro en update serial");
   try {
     const { id } = req.params;
     const {
@@ -82,7 +83,8 @@ exports.updateSerial = async (req, res) => {
       observaciones,
       usuario_id
     } = req.body;
-
+    console.log ("id",id);
+    console.log("datos",req.body);
     const serial = await Serial.getSerialById(id);
     if (!serial) {
       return res.status(404).json({ error: 'Serial no encontrado' });
@@ -293,7 +295,7 @@ async function registrarErrorEnvio({ reqBody, motivo_error, detalles_error }) {
   }
 }
 
-
+/*
 exports.obtenerSerialDisponible = async (req, res) => {
   console.log('Iniciando solicitud para obtener serial disponible');
   try {
@@ -366,4 +368,52 @@ exports.obtenerSerialDisponible = async (req, res) => {
 
     res.status(500).json({ error: 'Error al obtener serial disponible' });
   }
+};*/
+// Nuevo endpoint: obtener varios seriales a la vez y marcarlos como reservados
+exports.obtenerSerialesDisponibles = async (req, res) => {
+  console.log('Iniciando solicitud para obtener seriales disponibles');
+
+  try {
+    const { producto_id, woocommerce_id, cantidad, numeroPedido } = req.body;
+
+    // Validación básica
+    if (!producto_id || !woocommerce_id || !cantidad || cantidad <= 0) {
+      await registrarErrorEnvio({
+        reqBody: { producto_id, woocommerce_id, cantidad, numeroPedido },
+        motivo_error: 'Validación inicial fallida',
+        detalles_error: 'producto_id, woocommerce_id y cantidad son requeridos'
+      });
+      return res.status(400).json({ error: 'producto_id, woocommerce_id y cantidad son requeridos' });
+    }
+
+    const seriales = await Serial.obtenerSerialesDisponibles(
+      producto_id,
+      woocommerce_id,
+      cantidad,
+      numeroPedido
+    );
+
+    if (!seriales || seriales.length === 0) {
+      await registrarErrorEnvio({
+        reqBody: { producto_id, woocommerce_id, cantidad, numeroPedido },
+        motivo_error: 'Seriales no disponibles',
+        detalles_error: `No hay ${cantidad} seriales disponibles para producto_id=${producto_id} y woocommerce_id=${woocommerce_id}`
+      });
+      return res.status(404).json({ error: 'No hay suficientes seriales disponibles para este producto y woocommerce' });
+    }
+
+    res.status(200).json(seriales);
+
+  } catch (error) {
+    console.error('❌ Error en obtenerSerialesDisponibles:', error);
+
+    await registrarErrorEnvio({
+      reqBody: req.body,
+      motivo_error: 'Error interno en obtenerSerialesDisponibles',
+      detalles_error: error.message
+    });
+
+    res.status(500).json({ error: 'Error al obtener seriales disponibles' });
+  }
 };
+
