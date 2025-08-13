@@ -631,15 +631,24 @@ if (!smtpConfig) {
     return res.status(200).json({ mensaje: 'Webhook procesado correctamente ✅', envioId: id });
 
   } catch (error) {
-    await registrarEnvioError({
-      woo_config_id: wooId,
-      numero_pedido: data?.number || null,
-      motivo_error: 'UNEXPECTED_EXCEPTION',
-      detalles_error: error.stack || error.message
-    });
-    console.error('❌ Error al procesar webhook:', error);
-    return res.status(500).json({ mensaje: 'Error interno al procesar el webhook' });
+  // Caso especial: error esperado (payload vacío, test de WooCommerce, estado ignorado, etc.)
+  if (error.isIgnored) {
+    console.log(`ℹ Webhook ignorado: ${error.message}`);
+    return res.status(error.statusCode || 200).json({ mensaje: error.message });
   }
+
+  // Caso normal: error real
+  await registrarEnvioError({
+    woo_config_id: wooId,
+    numero_pedido: data?.number || null,
+    motivo_error: 'UNEXPECTED_EXCEPTION',
+    detalles_error: error.stack || error.message
+  });
+  
+  console.error('❌ Error al procesar webhook:', error);
+  return res.status(error.statusCode || 500).json({ mensaje: 'Error interno al procesar el webhook' });
+}
+
 };
 
 
