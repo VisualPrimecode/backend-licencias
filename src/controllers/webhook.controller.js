@@ -341,6 +341,7 @@ async function registrarEnvioError({
 }
 
 async function validarPedidoWebhook(data, wooId, registrarEnvioError) {
+  console.log("señal de webhook entrante a validar de tienda numero", wooId)
   // 1. Detectar payload vacío o test de conexión
   if (!data || typeof data !== 'object' || Object.keys(data).length === 0) {
     console.warn(`⚠️ Webhook vacío recibido (wooId: ${wooId}) → probablemente test de WooCommerce`);
