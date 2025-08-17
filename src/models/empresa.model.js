@@ -38,6 +38,12 @@ const getEmpresaNameById = async (id) => {
   return rows[0];
 };
 
+const getEmpresaByName = async (nombre) => {
+  const [rows] = await db.query('SELECT id FROM empresas WHERE nombre = ?', [nombre]);
+  return rows[0];
+};
+
+
 
 // Actualizar una empresa
 const updateEmpresa = async (id, datos) => {
@@ -204,5 +210,6 @@ module.exports = {
   asignarProductoAEmpresa,
   getUsuariosPorEmpresa,
   getEmpresaYUsuarioByWooConfigId,
-  getEmpresaNameById
+  getEmpresaNameById,
+  getEmpresaByName
 };

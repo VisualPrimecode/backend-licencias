@@ -122,6 +122,7 @@ exports.deleteSerial = async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar serial' });
   }
 };
+/*
 exports.cargaMasivaSeriales = async (req, res) => {
   try {
     if (!req.file) {
@@ -190,7 +191,181 @@ exports.cargaMasivaSeriales = async (req, res) => {
     console.error('❌ Error general en carga masiva:', err);
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
+};*/
+
+
+exports.cargaMasivaSeriales = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Archivo no proporcionado' });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const filePath = req.file.path;
+    const BATCH_SIZE = 500;
+
+    // Mapa de alias para cada campo
+    const aliasMap = {
+      codigo: ['codigo', 'código', 'serial', 'numero_serial', 'número_serial'],
+      id_serial: ['id_serial', 'id serial', 'serial_id'],
+      producto_id: ['producto_id', 'producto id', 'id_producto', 'id producto'],
+      estado: ['estado', 'status', 'situacion', 'situación'],
+      observaciones: ['observaciones', 'obs', 'comentarios', 'nota'],
+      usuario_id: ['usuario_id', 'usuario id', 'id_usuario', 'id usuario'],
+      woocommerce_id: ['woocommerce_id', 'woocommerce id', 'id_woocommerce', 'id woocommerce']
+    };
+
+    // Función para quitar tildes
+    const quitarTildes = (texto) =>
+      texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // Normalizar claves
+    const normalizarClave = (clave) =>
+      quitarTildes(clave.toLowerCase().trim().replace(/\s+/g, '_'));
+
+    // Obtener valor según alias
+    const obtenerValor = (fila, campo) => {
+      for (const alias of aliasMap[campo]) {
+        const key = normalizarClave(alias);
+        if (fila.hasOwnProperty(key)) {
+          return fila[key];
+        }
+      }
+      return null;
+    };
+    const empresaWooMap = await Serial.precargarWooIdsPorEmpresa();
+
+  const limpiarFila = (filaOriginal) => {
+  const fila = {};
+  for (const clave in filaOriginal) {
+    fila[normalizarClave(clave)] = filaOriginal[clave];
+  }
+
+  const empresaNombre = fila.empresa?.trim();
+
+  // Limpieza de valores con trim y manejo de numéricos con parseInt seguro
+  const rawCodigo = obtenerValor(fila, 'codigo');
+  const codigo = rawCodigo ? String(rawCodigo).trim() : '';
+
+  const rawIdSerial = obtenerValor(fila, 'id_serial');
+  const idSerial = rawIdSerial !== null && rawIdSerial !== undefined && String(rawIdSerial).trim() !== ''
+    ? parseInt(String(rawIdSerial).trim(), 10)
+    : null;
+
+  const rawProdId = obtenerValor(fila, 'producto_id');
+  const prodId = rawProdId !== null && rawProdId !== undefined && String(rawProdId).trim() !== ''
+    ? parseInt(String(rawProdId).trim(), 10)
+    : null;
+
+  const estado = obtenerValor(fila, 'estado') || 'disponible';
+
+  // Logs de depuración para ver valores limpios
+  console.log('[DEBUG LIMPIAR_FILA] Entrada cruda:', {
+    rawCodigo, rawIdSerial, rawProdId
+  });
+  console.log('[DEBUG LIMPIAR_FILA] Valores procesados:', {
+    codigo, idSerial, prodId
+  });
+
+  return {
+    codigo,
+    id_serial: !isNaN(idSerial) ? idSerial : null,
+    producto_id: !isNaN(prodId) ? prodId : null,
+    estado,
+    observaciones: obtenerValor(fila, 'observaciones') || '',
+    usuario_id: obtenerValor(fila, 'usuario_id')
+      ? parseInt(obtenerValor(fila, 'usuario_id'))
+      : null,
+    woocommerce_id: empresaWooMap[empresaNombre] || null
+  };
 };
+
+
+    // Función para insertar lote
+    const insertarLote = async (lote) => {
+      if (!lote.length) return { affectedRows: 0 };
+      return Serial.insertarSerialesMasivos(lote);
+    };
+
+    // Generador asíncrono para leer CSV
+    const leerCSV = async function* () {
+  const parser = fs.createReadStream(filePath).pipe(
+    csv({
+      separator: ';',
+      skipEmptyLines: true,
+      mapHeaders: ({ header }) => normalizarClave(header)
+    })
+  );
+  for await (const row of parser) {
+    yield limpiarFila(row);
+  }
+};
+
+
+    // Generador asíncrono para leer XLSX
+    const leerXLSX = async function* () {
+      const workbook = xlsx.readFile(filePath);
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const datos = xlsx.utils.sheet_to_json(hoja);
+      for (const row of datos) {
+        yield limpiarFila(row);
+      }
+    };
+
+    // Elegir lector según extensión
+    let lector;
+    if (ext === '.csv') {
+      lector = leerCSV();
+    } else if (ext === '.xlsx') {
+      lector = leerXLSX();
+    } else {
+      await fs.promises.unlink(filePath);
+      return res.status(400).json({ error: 'Formato de archivo no soportado' });
+    }
+
+    // Procesar en lotes usando un flujo unificado
+    let totalFilas = 0;
+    let totalInsertados = 0;
+    let batch = [];
+
+    for await (const fila of lector) {
+      totalFilas++;
+      if (fila.codigo && fila.producto_id) {
+        batch.push(fila);
+        if (batch.length >= BATCH_SIZE) {
+  console.log(`[DEPURACION] Insertando lote de ${batch.length} registros`);
+  const resInsert = await insertarLote(batch);
+  console.log('[DEPURACION] Resultado inserción:', resInsert);
+  totalInsertados += resInsert.affectedRows;
+  batch = [];
+}
+
+      }
+    }
+
+    // Insertar último lote si quedó algo
+    if (batch.length) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+    }
+
+    await fs.promises.unlink(filePath);
+
+    res.json({
+      mensaje: 'Carga completada',
+      total: totalFilas,
+      insertados: totalInsertados,
+      omitidos: totalFilas - totalInsertados
+    });
+
+  } catch (err) {
+    console.error('❌ Error general en carga masiva:', err);
+    res.status(500).json({ error: 'Error al procesar archivo' });
+  }
+};
+
+
+
 exports.previsualizarSeriales = async (req, res) => {
   try {
     if (!req.file) {

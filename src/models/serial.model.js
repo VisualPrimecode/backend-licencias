@@ -49,20 +49,65 @@ const updateSerial = async (id, {
 const deleteSerial = async (id) => {
   const [result] = await db.query('DELETE FROM seriales WHERE id = ?', [id]);
   return result;
+};/*
+const precargarWooIdsPorEmpresa = async () => {
+  // 1. Obtener todas las empresas
+  const [empresas] = await db.query('SELECT id, nombre FROM empresas');
+
+  // 2. Obtener todas las configuraciones WooCommerce
+  const [configs] = await db.query(
+    'SELECT empresa_id, woocommerce_id FROM woocommerce_api_config ORDER BY id ASC'
+  );
+
+  // 3. Construir el mapa en memoria
+  const empresaWooMap = {};
+  for (const empresa of empresas) {
+    // Busca la primera config asociada
+    const config = configs.find(cfg => cfg.empresa_id === empresa.id);
+    if (config) {
+      empresaWooMap[empresa.nombre] = config.woocommerce_id;
+    }
+  }
+
+  return empresaWooMap;
+};*/
+
+const precargarWooIdsPorEmpresa = async () => {
+  // Trae todas las empresas con su configuración
+  const [rows] = await db.query(`
+    SELECT e.nombre, c.id AS config_id
+    FROM empresas e
+    JOIN woocommerce_api_config c ON c.empresa_id = e.id
+    ORDER BY c.id ASC
+  `);
+
+  const empresaWooMap = {};
+  for (const row of rows) {
+    // Si hay varias configs por empresa, nos quedamos con la primera
+    if (!empresaWooMap[row.nombre]) {
+      empresaWooMap[row.nombre] = row.config_id;
+    }
+  }
+
+  return empresaWooMap;
 };
+
 
 const insertarSerialesMasivos = async (seriales) => {
   try {
-    const valores = seriales.map(serial => [
-      serial.codigo,
-      serial.producto_id,
-      serial.estado || 'disponible',
-      serial.observaciones || null,
-      serial.usuario_id || null
-    ]);
+   const valores = seriales.map(serial => [
+  serial.codigo,
+  serial.id_serial || null,         // segundo campo
+  serial.producto_id || null,       // tercero
+  serial.estado || 'disponible',    // cuarto
+  serial.observaciones || null,     // quinto
+  serial.usuario_id || null,        // sexto
+  serial.woocommerce_id || null     // séptimo
+]);
+
 
     const [result] = await db.query(
-      `INSERT INTO seriales (codigo, producto_id, estado, observaciones, usuario_id)
+      `INSERT INTO seriales (codigo, id_serial, producto_id, estado, observaciones, usuario_id, woocommerce_id)
        VALUES ?`,
       [valores]
     );
@@ -214,6 +259,7 @@ module.exports = {
   insertarSerialesMasivos,
   obtenerSerialesDisponibles,
     obtenerSerialDisponible2,
+    precargarWooIdsPorEmpresa
 
 
 };
