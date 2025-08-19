@@ -103,6 +103,8 @@ const getProductoAuxByIdWoo = async (id) => {
 };
 
 
+
+
 module.exports = {
   getAllProductos,
   getProductoById,

@@ -14,6 +14,10 @@ router.post('/', envioController.createEnvio);
 // Crear un nuevo envío
 router.post('/cotizaciones/', envioController.createCotizacion);
 
+router.post('/envioProductos/', envioController.createCotizacion2);
+
+
+
 // Actualizar un envío existente
 router.put('/:id', envioController.updateEnvio);
 // Actualizar estado de un envío

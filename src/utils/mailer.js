@@ -90,8 +90,24 @@ const sendCotizacionCorreo = async ({ smtpConfig, to, subject, text, html }) => 
   await transporter.sendMail(mailOptions);
 };
 
+const sendEnvioProductosCorreo = async ({ smtpConfig, to, subject, text, html }) => {
+  const transporter = await createTransporter(smtpConfig);
+
+  const mailOptions = {
+    from: `"${smtpConfig.sender_name}" <${smtpConfig.sender_email}>`,
+    to,
+    subject,
+    text,
+    html,
+    replyTo: smtpConfig.reply_to_email || smtpConfig.sender_email,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
+
 
 module.exports = {
   sendEnvioCorreo,
-  sendCotizacionCorreo
+  sendCotizacionCorreo,
+  sendEnvioProductosCorreo
 };

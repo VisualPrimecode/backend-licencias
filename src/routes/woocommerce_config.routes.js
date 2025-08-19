@@ -5,10 +5,8 @@ const wooConfigController = require('../controllers/woocommerce_config.controlle
 // Buscar pedidos de WooCommerce con filtros (versión lenta)
 router.get('/woo/:id/orders/search', wooConfigController.searchWooOrders);
 
-
 // Obtener un pedido específico por ID de pedido (más eficiente)
 router.get('/woo/:id/orders/:orderId', wooConfigController.getWooOrderById);
-
 
 // Obtener todas las configuraciones
 router.get('/', wooConfigController.getAllConfigs);
@@ -34,7 +32,7 @@ router.get('/woo/:id/products', wooConfigController.getAllConfigsWooProducts);
 // Obtener pedidos de WooCommerce por ID de configuración
 router.get('/woo/:id/orders', wooConfigController.getAllConfigsWooOrders);
 
-
-
+// 🚀 Nueva ruta para sincronizar productos
+router.post('/woo/:storeId/sync-products', wooConfigController.syncProducts);
 
 module.exports = router;

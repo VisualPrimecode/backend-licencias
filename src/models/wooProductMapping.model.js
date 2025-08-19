@@ -133,6 +133,7 @@ const getProductoInternoByNombreYWooId = async (nombreProducto, woocommerce_id) 
   }
 };
 
+
 module.exports = {
   getAllMappings,
   getMappingById,

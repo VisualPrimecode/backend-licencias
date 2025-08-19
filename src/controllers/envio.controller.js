@@ -1,9 +1,11 @@
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); // Ruta a tu cola
 const cotizacionQueue = require('../queues/cotizacionQueue');
+const envioProductosQueue = require('../queues/productosEnvioQueue');
 const Plantilla = require('../models/plantilla.model');
+const Serial = require('../models/serial.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
-const { createCotizacion } = require('../models/cotizacion.model');
+const { createCotizacion, createEnvioPersonalizado } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
 const { getProductoInternoByNombreYWooId } = require('../models/wooProductMapping.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
@@ -93,6 +95,7 @@ async function validarDatosEntrada(body) {
 
 // 🔹 validarSeriales ahora recibe reqBody y es async
 async function validarSeriales(seriales, nombreProducto, reqBody) {
+  console.log("entro en validar seriales")
   if (!Array.isArray(seriales) || seriales.length === 0) {
     await registrarErrorEnvio({
       reqBody,
@@ -164,6 +167,7 @@ async function obtenerSMTPConfig(woocommerce_id) {
     pass: config.smtp_password
   };
 }
+
 
 // 🔹 Controlador principal con registro de errores en el catch
 exports.createEnvio = async (req, res) => {
@@ -364,7 +368,7 @@ if (!plantilla) {
 
 
 
-
+//envio cotizacion metodo controller
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');
   console.log('Datos de la cotización:', req.body);
@@ -463,6 +467,121 @@ return res.status(201).json({ cotizacion_id: id });
     return res.status(500).json({ error: 'Error al crear cotización' });
   }
 };
+
+exports.createCotizacion2 = async (req, res) => { 
+  console.log('📝 Creando un nuevo envio de productos...');
+  console.log('Datos del envio de productos:', req.body);
+
+  try {
+    // ✅ Obtener plantilla relacionada a la tienda y motivo 'envioProductos'
+    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(
+      req.body.woocommerce_id,
+      'envioProductos'
+    );
+  //  console.log("plantillas obtenidas:", plantillas);
+    if (!plantillas || plantillas.length === 0) {
+      return res.status(404).json({ error: 'No se encontró plantilla para cotización en esta tienda' });
+    }
+
+    const plantilla = plantillas[0];
+    const cotizacionData = {
+      ...req.body,
+      nombre_cliente: req.body.nombre_cliente || 'Cliente',
+      numero_cotizacion: req.body.numero_cotizacion || 'N/A',
+      store_id: req.body.woocommerce_id || 3
+    };
+
+    console.log('Datos de la cotización procesados:', cotizacionData);
+
+    // ✅ Validación mínima
+    if (
+      !cotizacionData.email_destino ||
+      !cotizacionData.nombre_cliente ||
+      !cotizacionData.numero_cotizacion ||
+      !cotizacionData.store_id
+    ) {
+      return res.status(400).json({
+        error: 'Faltan campos obligatorios (email_destino, nombre_cliente, numero_cotizacion, store_id)'
+      });
+    }
+
+    // ✅ Obtener configuración SMTP desde la BD
+    const config = await getSMTPConfigByStoreId(cotizacionData.store_id);
+    if (!config) {
+      return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
+    }
+
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+
+    // 🧮 Calcular subtotal e IVA
+    const total = Number(cotizacionData.total || 0);
+    const subtotal = Number((total / 1.19).toFixed(0));
+    const iva = total - subtotal;
+
+    // 🔑 Nuevo paso: Obtener seriales para cada producto
+    const productosConSeriales = await Promise.all(
+      (cotizacionData.productos || []).map(async (p) => {
+        const result = await Serial.getSerialesByWooData(
+          cotizacionData.woocommerce_id,
+          p.id,
+          p.cantidad
+        );
+        return {
+          ...p,
+          seriales: result.error ? [] : result.seriales // 👈 añadimos los seriales al producto
+        };
+      })
+    );
+
+    // 🧾 Construir HTML básico con placeholders (sin reemplazos aún)
+    const cuerpo_html = plantilla.cuerpo_html || '';
+    const asunto_correo = plantilla.asunto || 'envioProductos';
+
+    // 🗂️ Registrar en BD (con estado PENDIENTE)
+    const id = await createEnvioPersonalizado({
+      id_usuario: cotizacionData.usuario_id,
+      id_woo: cotizacionData.woocommerce_id,
+      id_empresa: cotizacionData.empresa_id,
+      nombre_cliente: cotizacionData.nombre_cliente,
+      email_destino: cotizacionData.email_destino,
+      total,
+      subtotal,
+      iva,
+      productos_json: productosConSeriales, // 👈 ahora con seriales incluidos
+      smtp_host: smtpConfig.host,
+      smtp_user: smtpConfig.user,
+      plantilla_usada: plantilla.id,
+      asunto_correo,
+      cuerpo_html,
+      estado_envio: 'PENDIENTE',
+      mensaje_error: null
+    });
+console.log("productos con seriales:", JSON.stringify(productosConSeriales, null, 2));
+    // ✅ Encolar el trabajo para el worker con los seriales incluidos
+    await envioProductosQueue.add({
+      id,
+      ...cotizacionData,
+      productos: productosConSeriales, // 👈 importante
+      smtpConfig,
+      plantilla
+    });
+
+    console.log('✅ Job de cotización encolado con seriales');
+    return res.status(201).json({ cotizacion_id: id });
+
+  } catch (error) {
+    console.error('❌ Error al crear cotización:', error);
+    return res.status(500).json({ error: 'Error al crear cotización' });
+  }
+};
+
+
 
 
 // Actualizar un envío existente

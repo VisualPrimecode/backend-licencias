@@ -4,6 +4,8 @@ const db = require('../config/db'); // Para conectarse al sistema y obtener los 
 //LICENCIAS ORIGINALES
 // Funciones para obtener informes de licencias originales
 const getInformeLicenciasOriginales = async (configId, fechaInicio, fechaFin) => {
+      console.log('entro en getInformeLicenciasOriginales');
+
   let externalDb;
   console.log("Obteniendo informe de licencias originales para config ID:", configId);
   try {
@@ -77,6 +79,8 @@ const getInformeLicenciasOriginales = async (configId, fechaInicio, fechaFin) =>
 };
 
 const getInformeLicenciasPorMes = async (configId, anio) => {
+      console.log("entro en getInformeLicenciasPorMes")
+
   let externalDb;
   console.log(`📅 Obteniendo informe mensual de licencias originales para el año ${anio}, config ID: ${configId}`);
   try {
@@ -149,6 +153,8 @@ const getInformeLicenciasPorMes = async (configId, anio) => {
   }
 };
 const getInformeLicenciasPorRango = async (configId, fechaInicio, fechaFin) => {
+    console.log("entro en getInformeLicenciasPorRango")
+
   let externalDb;
   console.log(`📊 Obteniendo informe total y mensual para config ID: ${configId}`);
 
@@ -225,6 +231,7 @@ const getInformeLicenciasPorRango = async (configId, fechaInicio, fechaFin) => {
 //LICENCIAS software
 
 const getInformePorRango = async (configId, fechaInicio, fechaFin) => {
+  console.log("entro en getInformePorRango")
   let externalDb;
   console.log(`📦 Obteniendo informe detallado para config ID: ${configId}`);
 
@@ -283,7 +290,7 @@ const por_mes = mensual.map(row => ({
   por_mes
 };
   } catch (error) {
-    console.error('❌ Error al obtener informe detallado:', error.message);
+    console.error('❌ Error al obtener informe detallado por rango de  licenciasoriginales:', error.message);
     throw new Error('Error al obtener datos desde la base de datos externa: ' + error.message);
   } finally {
     if (externalDb) {
@@ -299,6 +306,7 @@ const por_mes = mensual.map(row => ({
 
 //licencias digitales
 const getInformePedidosDetalladoJejePorRango = async (configId, fechaInicio, fechaFin) => {
+  console.log('entro en getInformePedidosDetalladoJejePorRango');
   let externalDb;
   console.log(`📦 Obteniendo informe detallado JEJE por rango para config ID: ${configId}`);
 
@@ -373,7 +381,7 @@ const getInformePedidosDetalladoJejePorRango = async (configId, fechaInicio, fec
       datos: resultados
     };
   } catch (error) {
-    console.error('❌ Error al obtener informe JEJE detallado:', error.message);
+    console.error('❌ Error al obtener informe detallado licenciasdigitales:', error.message);
     throw new Error('Error al obtener datos desde la base de datos externa: ' + error.message);
   } finally {
     if (externalDb) {
@@ -387,6 +395,7 @@ const getInformePedidosDetalladoJejePorRango = async (configId, fechaInicio, fec
   }
 };
 const getInformePedidosTotalesJejePorRango = async (configId, fechaInicio, fechaFin) => {
+  console.log('entro en getInformePedidosTotalesJejePorRango');
   let externalDb;
   console.log(`📊 Obteniendo informe total y mensual (JEJE) para config ID: ${configId}`);
 

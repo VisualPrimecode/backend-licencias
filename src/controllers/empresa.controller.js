@@ -14,6 +14,31 @@ exports.getProductosPorEmpresa = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener productos por empresa' });
   }
 };
+// Obtener el ID de producto interno a partir de nombre de empresa y producto
+exports.getProductoInterno = async (req, res) => {
+  const { nombreEmpresa, nombreProducto } = req.body; // suponemos que viene en el body
+
+  console.log(
+    '🔍 Buscando producto interno para empresa: "%s", producto: "%s"',
+    nombreEmpresa,
+    nombreProducto
+  );
+
+  try {
+    const productoInternoId = await Empresa.getProductoInternoByEmpresaYProducto(
+      nombreEmpresa,
+      nombreProducto
+    );
+
+    res.status(200).json({
+      productoInternoId,
+      message: "Producto interno encontrado correctamente",
+    });
+  } catch (error) {
+    console.error("❌ Error al obtener producto interno:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+};
 
 // Obtener todas las empresas
 exports.getEmpresas = async (req, res) => {
@@ -87,6 +112,8 @@ exports.createEmpresa = async (req, res) => {
     res.status(500).json({ error: 'Error al crear empresa' });
   }
 };
+
+
 
 
 // Actualizar una empresa existente

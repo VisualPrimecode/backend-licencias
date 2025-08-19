@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const ProductosWoo = require('../models/woocommerce_config.model');
 
 
 // Obtener todas las empresas
@@ -43,7 +44,104 @@ const getEmpresaByName = async (nombre) => {
   return rows[0];
 };
 
+//metodo para obtener el producto interno
 
+const getTiendaIdByEmpresaName = async (nombreEmpresa) => {
+  const [rows] = await db.query(
+    `SELECT w.id 
+     FROM woocommerce_api_config w
+     INNER JOIN empresas e ON w.empresa_id = e.id
+     WHERE e.nombre = ?
+     LIMIT 1`,
+    [nombreEmpresa]
+  );
+  return rows.length ? rows[0].id : null;
+};
+
+const getProductIdByName = async (idTienda, nombreProducto) => {
+  try {
+    
+    const products = await ProductosWoo.getAllProducts(idTienda);
+
+    const product = products.find(
+      (p) => p.name.toLowerCase() === nombreProducto.toLowerCase()
+    );
+
+    return product ? product.id : null;
+  } catch (error) {
+    console.error("Error obteniendo producto por nombre:", error);
+    throw error;
+  }
+};
+
+const getProductoAuxByNombreAndIdWoo = async (idWoo, nombreProducto) => {
+  console.log("entro en getProductoAuxByNombreAndIdWoo",idWoo, nombreProducto);
+  const [rows] = await db.query(
+    'SELECT * FROM productosAux WHERE id_woo = ? AND LOWER(Nombre) = LOWER(?)',
+    [idWoo, nombreProducto]
+  );
+  return rows;
+};
+
+
+const getProductoInternoId = async (empresaId, woocommerceId, wooProductData) => {
+  console.log('🔍 Buscando producto interno para empresa:', empresaId, 'woocommerceId:', woocommerceId, 'wooProductData:', wooProductData);
+
+  try {
+    // Si wooProductData es un array, saco el primer elemento
+    const wooProductId = Array.isArray(wooProductData)
+      ? wooProductData[0]?.id_wooproduct
+      : wooProductData?.id_wooproduct || wooProductData;
+
+    if (!wooProductId) {
+      console.warn("⚠️ No se pudo extraer id_wooproduct");
+      return null;
+    }
+
+    const [rows] = await db.query(
+      `SELECT producto_interno_id 
+       FROM woo_product_mappings
+       WHERE empresa_id = ? AND woocommerce_id = ? AND woo_product_id = ?
+       LIMIT 1`,
+      [empresaId.id, woocommerceId, wooProductId]
+    );
+
+    return rows.length ? rows[0].producto_interno_id : null;
+  } catch (error) {
+    console.error("Error obteniendo producto interno:", error);
+    throw error;
+  }
+};
+
+const getProductoInternoByEmpresaYProducto = async (nombreEmpresa, nombreProducto) => {
+  console.log('🔍 Buscando producto interno para empresa:', nombreEmpresa, 'producto:', nombreProducto);
+  try {
+    // 1. Empresa
+    const empresaId = await getEmpresaByName(nombreEmpresa);
+    console.log('Empresa ID:', empresaId);
+    if (!empresaId) throw new Error(`Empresa no encontrada: ${nombreEmpresa}`);
+
+    // 2. Tienda
+    const tiendaId = await getTiendaIdByEmpresaName(nombreEmpresa);
+    console.log('Tienda ID:', tiendaId);
+    if (!tiendaId) throw new Error(`No se encontró tienda para empresa: ${nombreEmpresa}`);
+    
+    // 3. Producto externo
+    const productoExternoId = await getProductoAuxByNombreAndIdWoo(tiendaId, nombreProducto);
+    console.log('Producto externo ID:', productoExternoId);
+    if (!productoExternoId) throw new Error(`Producto no encontrado en tienda: ${nombreProducto}`);
+
+    // 4. Producto interno
+    const productoInternoId = await getProductoInternoId(empresaId, tiendaId, productoExternoId);
+    console.log('Producto interno ID:', productoInternoId);
+    if (!productoInternoId) throw new Error(`No existe mapeo interno para producto: ${nombreProducto}`);
+
+    return productoInternoId;
+  } catch (error) {
+    console.error("Error en getProductoInternoByEmpresaYProducto:", error.message);
+    throw error;
+  }
+};
 
 // Actualizar una empresa
 const updateEmpresa = async (id, datos) => {
@@ -211,5 +309,6 @@ module.exports = {
   getUsuariosPorEmpresa,
   getEmpresaYUsuarioByWooConfigId,
   getEmpresaNameById,
-  getEmpresaByName
+  getEmpresaByName,
+  getProductoInternoByEmpresaYProducto
 };

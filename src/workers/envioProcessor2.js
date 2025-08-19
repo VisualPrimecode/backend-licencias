@@ -3,7 +3,7 @@ const { sendEnvioCorreo } = require('../utils/mailer');
 module.exports = async function envioProcessor(job) {
   const envio = job.data;
   const { empresaName, productos = [] } = envio;
-
+  console.log("data envio",envio)
   try {
     const smtpConfig = envio.smtpConfig;
 

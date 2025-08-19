@@ -568,7 +568,7 @@ if (!empresaUsuario) {
     const billing = data.billing || {};
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
    // const email_cliente = billing.email || null; // quitar hardcode
-   const email_cliente = 'cleon@cloudi.cl'; 
+   const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
     const numero_pedido = data.number || data.id || null;
     const fecha_envio = data.date_paid || new Date().toISOString();
 

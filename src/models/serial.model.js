@@ -250,6 +250,44 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
     connection.release();
   }
 };
+
+// models/serialesModel.js
+
+const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
+  console.log("Obteniendo seriales por datos de WooCommerce:", woocommerceId, wooProductId, cantidad);
+  try {
+    // 1. Buscar el producto interno en el mapeo
+    const [productoMap] = await db.query(
+      `SELECT producto_interno_id 
+       FROM woo_product_mappings 
+       WHERE woocommerce_id = ? AND woo_product_id = ? 
+       LIMIT 1`,
+      [woocommerceId, wooProductId]
+    );
+
+    if (productoMap.length === 0) {
+      return { error: true, message: "No se encontró producto mapeado" };
+    }
+
+    const productoInternoId = productoMap[0].producto_interno_id;
+
+    // 2. Buscar seriales disponibles asociados a ese producto
+    const [seriales] = await db.query(
+      `SELECT id, codigo 
+       FROM seriales 
+       WHERE producto_id = ? AND estado = 'disponible' 
+       ORDER BY fecha_ingreso ASC 
+       LIMIT ?`,
+      [productoInternoId, cantidad]
+    );
+
+    return { error: false, seriales };
+  } catch (err) {
+    console.error("Error en getSerialesByWooData:", err);
+    throw err;
+  }
+};
+
 module.exports = {
   getAllSeriales,
   getSerialById,
@@ -259,7 +297,8 @@ module.exports = {
   insertarSerialesMasivos,
   obtenerSerialesDisponibles,
     obtenerSerialDisponible2,
-    precargarWooIdsPorEmpresa
+    precargarWooIdsPorEmpresa,
+    getSerialesByWooData
 
 
 };

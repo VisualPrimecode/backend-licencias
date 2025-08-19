@@ -1,10 +1,12 @@
 const Serial = require('../models/serial.model');
+const Empresa = require('../models/empresa.model');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
 const xlsx = require('xlsx');
 
 const {createEnvioError} = require('../models/enviosErrores.model');
+const { raw } = require('mysql2');
 
 
 // Obtener todos los seriales
@@ -51,7 +53,7 @@ exports.createSerial = async (req, res) => {
       return res.status(400).json({ error: 'Código y producto_id son obligatorios' });
     }
 
-    const estadosValidos = ['disponible', 'asignado', 'enviado', 'agotado'];
+    const estadosValidos = ['disponible', 'asignado', 'ENVIADO', 'agotado'];
     if (!estadosValidos.includes(estado)) {
       return res.status(400).json({ error: 'Estado no válido' });
     }
@@ -193,7 +195,134 @@ exports.cargaMasivaSeriales = async (req, res) => {
   }
 };*/
 
+// ============================
+// 🔹 Funciones de normalización y alias
+// ============================
 
+// Quita acentos/tildes de un texto
+const quitarTildes = (texto) =>
+  texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+// Normaliza una clave de cabecera para que sea uniforme
+const normalizarClave = (clave) =>
+  quitarTildes(clave.toLowerCase().trim().replace(/\s+/g, '_'));
+
+// Obtiene un valor de una fila en base al aliasMap
+const obtenerValor = (fila, campo, aliasMap) => {
+  for (const alias of aliasMap[campo]) {
+    const key = normalizarClave(alias);
+    if (fila.hasOwnProperty(key)) {
+      return fila[key];
+    }
+  }
+  return null;
+};
+
+// ============================
+// 🔹 Limpieza y transformación de filas
+// ============================
+
+const limpiarFila = (filaOriginal, aliasMap, empresaWooMap) => {
+  const fila = {};
+  for (const clave in filaOriginal) {
+    fila[normalizarClave(clave)] = filaOriginal[clave];
+  }
+
+  // Empresa: puede venir del archivo
+  const rawEmpresa = fila.empresa;
+  const empresaNombre = rawEmpresa ? String(rawEmpresa).trim() : '';
+
+  // Producto
+  const rawNombreProducto = obtenerValor(fila, 'nombre_producto', aliasMap)?.trim();
+  const NombreProducto = rawNombreProducto ? String(rawNombreProducto).trim() : '';
+
+  // Código
+  const rawCodigo = obtenerValor(fila, 'codigo', aliasMap);
+  const codigo = rawCodigo ? String(rawCodigo).trim() : '';
+
+  // ID Serial
+  const rawIdSerial = obtenerValor(fila, 'id_serial', aliasMap);
+  const idSerial = rawIdSerial !== null && rawIdSerial !== undefined && String(rawIdSerial).trim() !== ''
+    ? parseInt(String(rawIdSerial).trim(), 10)
+    : null;
+
+  // Producto ID directo
+  const rawProdId = obtenerValor(fila, 'producto_id', aliasMap);
+  const prodId = rawProdId !== null && rawProdId !== undefined && String(rawProdId).trim() !== ''
+    ? parseInt(String(rawProdId).trim(), 10)
+    : null;
+
+  // Estado
+  const estado = obtenerValor(fila, 'estado', aliasMap) || 'disponible';
+
+  return {
+    codigo,
+    id_serial: !isNaN(idSerial) ? idSerial : null,
+    producto_id: !isNaN(prodId) ? prodId : null,
+    nombre_producto: NombreProducto || '',     // ✅ ya lo tienes
+    empresa: empresaNombre || '',              // ✅ añadir empresa explícita
+    estado,
+    observaciones: obtenerValor(fila, 'observaciones', aliasMap) || '',
+    usuario_id: obtenerValor(fila, 'usuario_id', aliasMap)
+      ? parseInt(obtenerValor(fila, 'usuario_id', aliasMap))
+      : null,
+    woocommerce_id: empresaWooMap[empresaNombre] || null
+  };
+};
+
+// ============================
+// 🔹 Lectores de archivos (CSV y XLSX)
+// ============================
+
+const leerCSV = async function* (filePath, aliasMap, empresaWooMap) {
+  const parser = fs.createReadStream(filePath).pipe(
+    csv({
+      separator: ';',
+      skipEmptyLines: true,
+      mapHeaders: ({ header }) => normalizarClave(header)
+    })
+  );
+  for await (const row of parser) {
+    yield limpiarFila(row, aliasMap, empresaWooMap);
+  }
+};
+
+const leerXLSX = async function* (filePath, aliasMap, empresaWooMap) {
+  const workbook = xlsx.readFile(filePath);
+  const hoja = workbook.Sheets[workbook.SheetNames[0]];
+  const datos = xlsx.utils.sheet_to_json(hoja);
+  for (const row of datos) {
+    yield limpiarFila(row, aliasMap, empresaWooMap);
+  }
+};
+
+// Selector de lector en base a extensión
+const getLector = (ext, filePath, aliasMap, empresaWooMap) => {
+  if (ext === '.csv') {
+    return leerCSV(filePath, aliasMap, empresaWooMap);
+  } else if (ext === '.xlsx') {
+    return leerXLSX(filePath, aliasMap, empresaWooMap);
+  } else {
+    throw new Error('Formato de archivo no soportado');
+  }
+};
+// ============================
+// 🔹 Inserción en lotes
+// ============================
+
+const insertarLote = async (lote) => {
+  if (!lote.length) return { affectedRows: 0 };
+
+  try {
+    const resultado = await Serial.insertarSerialesMasivos(lote);
+    console.log(`[DEPURACION] Insertados ${resultado.affectedRows} registros`);
+    return resultado;
+  } catch (error) {
+    console.error('❌ Error al insertar lote:', error);
+    return { affectedRows: 0 };
+  }
+};
+/*
 exports.cargaMasivaSeriales = async (req, res) => {
   try {
     if (!req.file) {
@@ -209,6 +338,7 @@ exports.cargaMasivaSeriales = async (req, res) => {
       codigo: ['codigo', 'código', 'serial', 'numero_serial', 'número_serial'],
       id_serial: ['id_serial', 'id serial', 'serial_id'],
       producto_id: ['producto_id', 'producto id', 'id_producto', 'id producto'],
+      nombre_producto: ['nombre_producto', 'producto', 'producto_nombre', 'nombre producto'],
       estado: ['estado', 'status', 'situacion', 'situación'],
       observaciones: ['observaciones', 'obs', 'comentarios', 'nota'],
       usuario_id: ['usuario_id', 'usuario id', 'id_usuario', 'id usuario'],
@@ -242,6 +372,7 @@ exports.cargaMasivaSeriales = async (req, res) => {
   }
 
   const empresaNombre = fila.empresa?.trim();
+  const nombreProducto = obtenerValor(fila, 'nombre_producto')?.trim();
 
   // Limpieza de valores con trim y manejo de numéricos con parseInt seguro
   const rawCodigo = obtenerValor(fila, 'codigo');
@@ -362,7 +493,107 @@ exports.cargaMasivaSeriales = async (req, res) => {
     console.error('❌ Error general en carga masiva:', err);
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
+};*/
+// ============================
+// 🔹 Orquestador principal
+// ============================
+
+exports.cargaMasivaSeriales = async (req, res) => {
+  try {
+    // 1. Validar archivo
+    if (!req.file) {
+      return res.status(400).json({ error: 'Archivo no proporcionado' });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const filePath = req.file.path;
+    const BATCH_SIZE = 500;
+
+    // 2. Definir alias
+    const aliasMap = {
+      codigo: ['codigo', 'código', 'serial', 'numero_serial', 'número_serial'],
+      id_serial: ['id_serial', 'id serial', 'serial_id'],
+      producto_id: ['producto_id', 'producto id', 'id_producto', 'id producto'],
+      nombre_producto: ['nombre_producto', 'producto', 'producto_nombre', 'nombre producto'],
+      estado: ['estado', 'status', 'situacion', 'situación'],
+      observaciones: ['observaciones', 'obs', 'comentarios', 'nota'],
+      usuario_id: ['usuario_id', 'usuario id', 'id_usuario', 'id usuario'],
+      woocommerce_id: ['woocommerce_id', 'woocommerce id', 'id_woocommerce', 'id woocommerce']
+    };
+
+    // 3. Precargar mapa de WooCommerce por empresa
+    const empresaWooMap = await Serial.precargarWooIdsPorEmpresa();
+
+    // 4. Elegir lector según extensión
+   let lector;
+try {
+  lector = getLector(ext, filePath, aliasMap, empresaWooMap);
+} catch (error) {
+  await fs.promises.unlink(filePath);
+  return res.status(400).json({ error: error.message });
+}
+
+// 5. Procesar archivo en lotes
+let totalFilas = 0;
+let totalInsertados = 0;
+let batch = [];
+
+for await (const fila of lector) {
+  totalFilas++;
+
+  // 1. Obtener nombre de empresa (del Excel)
+  const nombreEmpresa = fila.empresa;   // ✅ ya viene de limpiarFila
+
+  // 2. Resolver producto_id usando la nueva función
+  try {
+    console.log(`Resolviendo producto para: ${fila.nombre_producto} en empresa: ${nombreEmpresa}`);
+    const productoInternoId = await Empresa.getProductoInternoByEmpresaYProducto(
+      nombreEmpresa,
+      fila.nombre_producto
+    );
+    fila.producto_id = productoInternoId; // inyectamos aquí
+  } catch (err) {
+    console.warn(`Fila omitida: ${fila.nombre_producto} (empresa: ${nombreEmpresa}) - ${err.message}`);
+    continue; // saltamos esta fila si no se puede resolver
+  }
+
+  // 3. Validar y acumular
+  if (fila.codigo && fila.producto_id) {
+    batch.push(fila);
+
+    if (batch.length >= BATCH_SIZE) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+      batch = [];
+    }
+  }
+}
+
+
+
+    // 6. Insertar último lote pendiente
+    if (batch.length) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+    }
+
+    // 7. Eliminar archivo temporal
+    await fs.promises.unlink(filePath);
+
+    // 8. Respuesta final
+    res.json({
+      mensaje: 'Carga completada',
+      total: totalFilas,
+      insertados: totalInsertados,
+      omitidos: totalFilas - totalInsertados
+    });
+
+  } catch (err) {
+    console.error('❌ Error general en carga masiva:', err);
+    res.status(500).json({ error: 'Error al procesar archivo' });
+  }
 };
+
 
 
 
@@ -589,6 +820,32 @@ exports.obtenerSerialesDisponibles = async (req, res) => {
     });
 
     res.status(500).json({ error: 'Error al obtener seriales disponibles' });
+  }
+};
+
+exports.obtenerSeriales = async (req, res) => {
+  console.log('📦 Obteniendo seriales disponibles...');
+  try {
+    const { woocommerce_id, woo_product_id, cantidad } = req.body;
+
+    if (!woocommerce_id || !woo_product_id || !cantidad) {
+      return res.status(400).json({ error: 'Faltan parámetros requeridos' });
+    }
+
+    const result = await Serial.getSerialesByWooData(
+      woocommerce_id,
+      woo_product_id,
+      cantidad
+    );
+
+    if (result.error) {
+      return res.status(404).json({ error: result.message });
+    }
+
+    res.json({ seriales: result.seriales });
+  } catch (error) {
+    console.error('❌ Error al obtener seriales:', error);
+    res.status(500).json({ error: 'Error al obtener seriales' });
   }
 };
 

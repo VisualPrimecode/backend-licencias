@@ -33,5 +33,7 @@ router.post('/asignar-producto', empresaController.asignarProductoAEmpresa);
 
 router.get('/config/:configId', empresaController.getEmpresaYUsuarioByWooConfigId);
 
+router.post('/producto-interno', empresaController.getProductoInterno);
+
 
 module.exports = router;

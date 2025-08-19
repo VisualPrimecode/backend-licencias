@@ -6,9 +6,8 @@ const upload = require('../middleware/upload');
 // Ruta para carga masiva de seriales
 router.post('/carga-masiva', upload.single('archivo'), serialController.cargaMasivaSeriales);
 
-//ruta previsualizacion de carga masiva de seriales
+// Ruta previsualizacion de carga masiva de seriales
 router.post('/prev-carga-masiva', upload.single('archivo'), serialController.previsualizarSeriales);
-
 
 // Obtener todos los seriales
 router.get('/', serialController.getSeriales);
@@ -25,8 +24,10 @@ router.put('/:id', serialController.updateSerial);
 // Eliminar un serial
 router.delete('/:id', serialController.deleteSerial);
 
-// Obtener seriales por producto_id
+// Obtener version 1 para un metodo en especifico
 router.post('/disponibles', serialController.obtenerSerialesDisponibles);
 
+// 🔹 Nueva ruta: obtener seriales por mapping WooCommerce
+router.post('/obtener-seriales', serialController.obtenerSeriales);
 
 module.exports = router;

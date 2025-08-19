@@ -8,6 +8,7 @@ const getAllConfigs = async () => {
 };
 //obtener productos de WooCommerce por ID de wooCommerce
 
+
 const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
@@ -30,6 +31,91 @@ const getProducts = async (id, queryParams = {}) => {
     
   } catch (error) {
     console.error("Error obteniendo productos:", error.response?.data || error);
+    throw error;
+  }
+};
+
+// Trae TODOS los productos de WooCommerce con paginación
+const getAllProducts = async (id, queryParams = {}) => {
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    let page = 1;
+    let allProducts = [];
+    let hasMore = true;
+
+    while (hasMore) {
+      const response = await api.get("products", {
+        ...queryParams,
+        per_page: 100, // WooCommerce permite hasta 100 por página
+        page
+      });
+
+      const products = response.data.map(product => ({
+        id: product.id,
+        name: product.name,
+        price: product.price
+      }));
+
+      allProducts = allProducts.concat(products);
+
+      // si la respuesta vino vacía, significa que no hay más páginas
+      hasMore = products.length > 0;
+      page++;
+    }
+
+    return allProducts;
+  } catch (error) {
+    console.error("Error obteniendo todos los productos:", error.response?.data || error);
+    throw error;
+  }
+};
+const syncProductsFromStore = async (storeId) => {
+  try {
+    // 1. Obtener la instancia de API WooCommerce
+    const api = await model.getWooApiInstanceByConfigId(storeId);
+
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      // 2. Llamar a WooCommerce para obtener productos
+      const response = await api.get("products", {
+        per_page: 100,
+        page
+      });
+
+      const products = response.data;
+
+      // 3. Iterar sobre productos y guardar en BD
+      for (const product of products) {
+        const data = {
+          Nombre: product.name,
+          Precio_normal: product.regular_price || null,
+          Precio_rebajado: product.sale_price || null,
+          id_wooproduct: product.id,
+          id_woo: storeId
+        };
+
+        // 🔑 Si existe el producto (por id_wooproduct), actualizar
+        // 🔑 Si no, insertarlo
+        await db.query(`
+          INSERT INTO productosAux (Nombre, Precio_normal, Precio_rebajado, id_wooproduct, id_woo)
+          VALUES (?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE
+            Nombre = VALUES(Nombre),
+            Precio_normal = VALUES(Precio_normal),
+            Precio_rebajado = VALUES(Precio_rebajado)
+        `, [data.Nombre, data.Precio_normal, data.Precio_rebajado, data.id_wooproduct, data.id_woo]);
+      }
+
+      // 4. Verificar si hay más páginas
+      hasMore = products.length > 0;
+      page++;
+    }
+
+    return { success: true, message: "Productos sincronizados correctamente" };
+  } catch (error) {
+    console.error("Error sincronizando productos:", error.response?.data || error);
     throw error;
   }
 };
@@ -427,5 +513,7 @@ module.exports = {
   getPedidos,
   getPedidoById,
   getPedidosInforme,
-  searchPedidos
+  searchPedidos,
+  getAllProducts,
+  syncProductsFromStore
 };

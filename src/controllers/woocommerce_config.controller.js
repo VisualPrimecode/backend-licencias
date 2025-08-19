@@ -9,8 +9,37 @@ exports.getAllConfigs = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener configuraciones' });
   }
 };
+
+exports.syncProducts = async (req, res) => {
+  const { storeId } = req.params;
+
+  console.log(`🔄 Sincronizando productos de la tienda: ${storeId}...`);
+
+  try {
+    if (!storeId) {
+      return res.status(400).json({ error: "Falta el parámetro storeId" });
+    }
+
+    const result = await WooConfig.syncProductsFromStore(storeId);
+
+    res.json({
+      success: true,
+      message: result.message || "Productos sincronizados correctamente"
+    });
+  } catch (error) {
+    console.error("❌ Error al sincronizar productos:", error.response?.data || error);
+    res.status(500).json({
+      success: false,
+      error: "Error al sincronizar productos",
+      details: error.message
+    });
+  }
+};
+
 //obtener todos los prodcutos de  un WooCommerce
 exports.getAllConfigsWooProducts = async (req, res) => {
+  console.log('🔍 Obteniendo productos WooCommerce...');
+  console.log('Params:', req.params); // Añadido para depuración
   try {
     const { id } = req.params;
     const queryParams = req.query; // <-- per_page, page, _fields, etc.

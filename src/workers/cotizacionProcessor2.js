@@ -51,7 +51,7 @@ module.exports = async function cotizacionProcessor(job) {
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
       .replace(/{{validez_texto}}/g, plantilla.validez_texto || '');
 
-    console.log('📨 HTML con reemplazos:', htmlContent);
+   // console.log('📨 HTML con reemplazos:', htmlContent);
 
     // ✉️ Asunto con reemplazos también (opcional)
     const subject = (plantilla.asunto || 'Tu cotización')
