@@ -4,6 +4,7 @@ const cotizacionQueue = require('../queues/cotizacionQueue');
 const envioProductosQueue = require('../queues/productosEnvioQueue');
 const Plantilla = require('../models/plantilla.model');
 const Serial = require('../models/serial.model');
+const WooProductMapping = require('../models/wooProductMapping.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const { createCotizacion, createEnvioPersonalizado } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
@@ -525,19 +526,46 @@ exports.createCotizacion2 = async (req, res) => {
     const iva = total - subtotal;
 
     // 🔑 Nuevo paso: Obtener seriales para cada producto
-    const productosConSeriales = await Promise.all(
-      (cotizacionData.productos || []).map(async (p) => {
-        const result = await Serial.getSerialesByWooData(
-          cotizacionData.woocommerce_id,
-          p.id,
-          p.cantidad
-        );
-        return {
-          ...p,
-          seriales: result.error ? [] : result.seriales // 👈 añadimos los seriales al producto
-        };
-      })
+    const productosConSerialesYPlantilla = await Promise.all(
+  (cotizacionData.productos || []).map(async (p) => {
+    // 1️⃣ Obtener producto interno a partir del Woo product ID externo
+    const productoInternoId = await WooProductMapping.getProductoInternoId(
+      cotizacionData.woocommerce_id,
+      p.id
     );
+
+    if (!productoInternoId) {
+      console.warn(`⚠️ No se encontró mapping interno para el producto Woo ${p.id}`);
+      return {
+        ...p,
+        seriales: [],
+        plantilla: null
+      };
+    }
+
+    // 2️⃣ Obtener seriales
+    const result = await Serial.getSerialesByWooData(
+      cotizacionData.woocommerce_id,
+      p.id,
+      p.cantidad
+    );
+
+    // 3️⃣ Obtener plantilla asociada al producto interno
+    const plantilla = await Plantilla.getPlantillaByIdProductoWoo(
+      productoInternoId,
+      cotizacionData.woocommerce_id
+    );
+
+    return {
+      ...p,
+      producto_interno_id: productoInternoId, // opcional: guardar para depuración
+      seriales: result.error ? [] : result.seriales,
+      plantilla: plantilla || null
+    };
+  })
+);
+
+
 
     // 🧾 Construir HTML básico con placeholders (sin reemplazos aún)
     const cuerpo_html = plantilla.cuerpo_html || '';
@@ -553,7 +581,7 @@ exports.createCotizacion2 = async (req, res) => {
       total,
       subtotal,
       iva,
-      productos_json: productosConSeriales, // 👈 ahora con seriales incluidos
+      productos_json: productosConSerialesYPlantilla, // 👈 ahora con seriales incluidos
       smtp_host: smtpConfig.host,
       smtp_user: smtpConfig.user,
       plantilla_usada: plantilla.id,
@@ -562,12 +590,12 @@ exports.createCotizacion2 = async (req, res) => {
       estado_envio: 'PENDIENTE',
       mensaje_error: null
     });
-console.log("productos con seriales:", JSON.stringify(productosConSeriales, null, 2));
+console.log("productos con seriales:", JSON.stringify(productosConSerialesYPlantilla, null, 2));
     // ✅ Encolar el trabajo para el worker con los seriales incluidos
     await envioProductosQueue.add({
       id,
       ...cotizacionData,
-      productos: productosConSeriales, // 👈 importante
+      productos: productosConSerialesYPlantilla, // 👈 importante
       smtpConfig,
       plantilla
     });

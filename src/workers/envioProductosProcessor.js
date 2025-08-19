@@ -26,32 +26,29 @@ module.exports = async function enviosProductosProcessor(job) {
     const iva = total - subtotal;
     const ivaFormateado = formatoMiles(iva.toFixed(0));
 
-    // 🧾 Generar filas de productos (sin tabla, solo filas <tr>)
     // 🧾 Generar tabla de productos en HTML
-const productosHtml = enviossProductos.productos.map(p => {
-  // Si hay seriales, listarlos con <li>
-  const serialesHtml = (p.seriales && p.seriales.length > 0)
-    ? `
-      <ul style="margin: 5px 0; padding-left: 15px; font-size: 12px; color: #555;">
-        ${p.seriales.map(s => `<li>${s.codigo}</li>`).join('')}
-      </ul>
-    `
-    : '';
+    const productosHtml = enviossProductos.productos.map(p => {
+      const serialesHtml = (p.seriales && p.seriales.length > 0)
+        ? `
+          <ul style="margin: 5px 0; padding-left: 15px; font-size: 12px; color: #555;">
+            ${p.seriales.map(s => `<li>${s.codigo}</li>`).join('')}
+          </ul>
+        `
+        : '';
 
-  return `
-    <tr>
-      <td style="padding: 10px; border: 1px solid #ddd;">
-        ${p.name}
-        ${serialesHtml} <!-- seriales debajo del nombre -->
-      </td>
-      <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">${p.cantidad}</td>
-      <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">$${formatoMiles(p.price)}</td>
-    </tr>
-  `;
-}).join('');
+      return `
+        <tr>
+          <td style="padding: 10px; border: 1px solid #ddd;">
+            ${p.name}
+            ${serialesHtml}
+          </td>
+          <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">${p.cantidad}</td>
+          <td style="padding: 10px; border: 1px solid #ddd; text-align: right;">$${formatoMiles(p.price)}</td>
+        </tr>
+      `;
+    }).join('');
 
-
-    // 🔑 Nuevo: seriales listados como bloque independiente
+    // 🔑 Bloque de seriales independiente
     const serialesHtml = enviossProductos.productos.map(p => {
       if (!p.seriales || p.seriales.length === 0) return '';
       return `
@@ -66,6 +63,7 @@ const productosHtml = enviossProductos.productos.map(p => {
 
     console.log('🔎 HTML original:', plantilla.cuerpo_html);
 
+    // 📝 Reemplazo de placeholders
     let htmlContent = plantilla.cuerpo_html || '';
     htmlContent = htmlContent
       .replace(/{{nombre_cliente}}/g, enviossProductos.nombre_cliente || 'cliente')
@@ -73,15 +71,29 @@ const productosHtml = enviossProductos.productos.map(p => {
       .replace(/{{total}}/g, totalFormateado)
       .replace(/{{subtotal}}/g, subtotalFormateado)
       .replace(/{{iva}}/g, ivaFormateado)
-      .replace(/{{tabla_productos}}/g, productosHtml) // 👈 solo filas
-      .replace(/{{seriales}}/g, serialesHtml)         // 👈 bloque aparte
+      .replace(/{{tabla_productos}}/g, productosHtml)
+      .replace(/{{seriales}}/g, serialesHtml)
       .replace(/{{firma}}/g, plantilla.firma || '')
       .replace(/{{logo_url}}/g, plantilla.logo_url || '')
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
       .replace(/{{validez_texto}}/g, plantilla.validez_texto || '');
 
-    //console.log('📨 HTML con reemplazos:', htmlContent);
+    // 🔑 Concatenar plantillas por producto (si existen)
+    const instruccionesHtml = enviossProductos.productos.map((p) => {
+      const cuerpo = p?.plantilla?.cuerpo_html?.trim();
+      if (!cuerpo) return '';
+      return `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+          <h3 style="color: #007BFF;">📦 <strong>${p.name}</strong></h3>
+          ${cuerpo}
+        </div>
+      `;
+    }).join('');
 
+    // 📌 HTML final = plantilla general + plantillas de cada producto
+    htmlContent = htmlContent + instruccionesHtml;
+
+    // 📤 Envío del correo
     const subject = (plantilla.asunto || 'Tu cotización')
       .replace(/{{nombre_cliente}}/g, enviossProductos.nombre_cliente || 'cliente')
       .replace(/{{numero_cotizacion}}/g, enviossProductos.numero_cotizacion || 'N/A');
