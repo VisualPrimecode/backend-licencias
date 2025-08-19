@@ -231,7 +231,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
     const serial = rows[0];
 
        await connection.query(
-      `UPDATE serialesAux
+      `UPDATE seriales
        SET estado = 'asignado'
        WHERE id = ?`,
       [serial.id]
