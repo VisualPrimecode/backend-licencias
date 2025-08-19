@@ -213,7 +213,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
     // 1. Seleccionar el primer serial disponible y bloquearlo
     const [rows] = await connection.query(
       `SELECT id, codigo
-       FROM serialesAux
+       FROM seriales
        WHERE producto_id = ?
          AND woocommerce_id = ?
          AND estado = 'disponible'
