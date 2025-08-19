@@ -360,7 +360,7 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
     // 2.2 Obtener seriales para cada unidad
     const seriales = [];
     for (let i = 0; i < cantidad; i++) {
-      const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId);
+      const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
       if (!serial || !serial.id || !serial.codigo) {
         const err = new Error(`No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`);
         err.statusCode = 404;

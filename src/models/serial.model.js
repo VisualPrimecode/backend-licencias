@@ -159,7 +159,7 @@ const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
 // Obtener varios seriales disponibles y marcarlos como reservados
 const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad, numero_pedido) => {
   const connection = await db.getConnection();
-console.log("entro a obtener seriales");
+  console.log("entro a obtener seriales");
   try {
     await connection.beginTransaction();
 
@@ -175,7 +175,7 @@ console.log("entro a obtener seriales");
        FOR UPDATE`,
       [producto_id, woocommerce_id, cantidad]
     );
-    console.log("numerp de registros", rows.length);
+    console.log("numero de registros", rows.length);
 
     if (rows.length < cantidad) {
       await connection.rollback();
@@ -183,13 +183,16 @@ console.log("entro a obtener seriales");
     }
 
     const idsSeriales = rows.map(s => s.id);
-    console.log(idsSeriales);
-    // 2. Actualizar estado inmediatamente a 'reservado'
+    console.log("IDs seleccionados:", idsSeriales);
+
+    // 2. Actualizar estado inmediatamente a 'asignado' y guardar numero_pedido
     await connection.query(
       `UPDATE seriales
-       SET estado = 'asignado', observaciones = ?
+       SET estado = 'asignado',
+           observaciones = ?,
+           numero_pedido = ?
        WHERE id IN (?)`,
-      [`Reservado para pedido ${numero_pedido}`, idsSeriales]
+      [`Reservado para pedido ${numero_pedido}`, numero_pedido, idsSeriales]
     );
 
     await connection.commit();
@@ -205,7 +208,8 @@ console.log("entro a obtener seriales");
 };
 
 
-const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
+
+const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedido) => {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -230,19 +234,22 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id) => {
 
     const serial = rows[0];
 
-       await connection.query(
+    // 2. Marcar como asignado y guardar número de pedido
+    await connection.query(
       `UPDATE seriales
-       SET estado = 'asignado'
+       SET estado = 'asignado',
+           numero_pedido = ?
        WHERE id = ?`,
-      [serial.id]
+      [numero_pedido, serial.id]
     );
 
     // 3. Confirmar la transacción
-        await connection.commit();
+    await connection.commit();
 
-    
-
-    return serial; // Retorna el serial ya reservado
+    // 4. Retornar el serial ya reservado con su número de pedido
+    return {
+      ...serial
+    };
   } catch (error) {
     await connection.rollback();
     throw new Error('Error al obtener y asignar serial: ' + error.message);

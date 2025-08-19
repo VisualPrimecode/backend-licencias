@@ -468,7 +468,7 @@ return res.status(201).json({ cotizacion_id: id });
     return res.status(500).json({ error: 'Error al crear cotización' });
   }
 };
-
+//envio de productos personalizados
 exports.createCotizacion2 = async (req, res) => { 
   console.log('📝 Creando un nuevo envio de productos...');
   console.log('Datos del envio de productos:', req.body);
