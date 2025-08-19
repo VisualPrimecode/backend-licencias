@@ -385,7 +385,10 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
   // 3. Devolver lista final
   return productosProcesados;
 }
-
+async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
+  const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
+  return plantilla || null; // ❌ Ya no hay plantilla por defecto
+}
 async function obtenerEmpresaYUsuario(wooId, numero_pedido, registrarEnvioError) {
   const empresaUsuario = await Empresa.getEmpresaYUsuarioByWooConfigId(wooId);
 
@@ -402,10 +405,7 @@ async function obtenerEmpresaYUsuario(wooId, numero_pedido, registrarEnvioError)
 }
 
 
-async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
-  const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
-  return plantilla || null; // ❌ Ya no hay plantilla por defecto
-}
+
 
 async function obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError) {
   const config = await getSMTPConfigByStoreId(wooId);
@@ -474,8 +474,8 @@ if (!empresaUsuario) {
     // ✅ Datos del cliente
     const billing = data.billing || {};
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-   // const email_cliente = billing.email || null; // quitar hardcode
-   const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
+    const email_cliente = billing.email || null; // quitar hardcode
+   //const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
     const numero_pedido = data.number || data.id || null;
     const fecha_envio = data.date_paid || new Date().toISOString();
 

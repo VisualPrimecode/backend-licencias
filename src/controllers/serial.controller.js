@@ -538,55 +538,106 @@ let totalFilas = 0;
 let totalInsertados = 0;
 let batch = [];
 
+/// cache en memoria: clave = "empresa:producto", valor = productoInternoId
+const productoCache = new Map();
+
+// contadores agrupados
+const resumenInsertados = new Map(); // clave: empresa:producto
+const resumenOmitidos = new Map();   // clave: empresa:producto:motivo
+
 for await (const fila of lector) {
   totalFilas++;
 
-  // 1. Obtener nombre de empresa (del Excel)
-  const nombreEmpresa = fila.empresa;   // ✅ ya viene de limpiarFila
+  const nombreEmpresa = fila.empresa?.trim() || "";
+  const nombreProducto = fila.nombre_producto?.trim() || "";
 
-  // 2. Resolver producto_id usando la nueva función
-  try {
-    console.log(`Resolviendo producto para: ${fila.nombre_producto} en empresa: ${nombreEmpresa}`);
-    const productoInternoId = await Empresa.getProductoInternoByEmpresaYProducto(
-      nombreEmpresa,
-      fila.nombre_producto
-    );
-    fila.producto_id = productoInternoId; // inyectamos aquí
-  } catch (err) {
-    console.warn(`Fila omitida: ${fila.nombre_producto} (empresa: ${nombreEmpresa}) - ${err.message}`);
-    continue; // saltamos esta fila si no se puede resolver
+  if (!nombreEmpresa || !nombreProducto) {
+    const motivo = `Faltan datos → empresa: "${nombreEmpresa}", producto: "${nombreProducto}"`;
+    console.warn(`Fila omitida: ${motivo}`);
+    const key = `${nombreEmpresa}:${nombreProducto}:${motivo}`;
+    resumenOmitidos.set(key, {
+      empresa: nombreEmpresa,
+      producto: nombreProducto,
+      motivo,
+      cantidad: (resumenOmitidos.get(key)?.cantidad || 0) + 1
+    });
+    continue;
   }
 
-  // 3. Validar y acumular
+  const cacheKey = `${nombreEmpresa}:${nombreProducto}`;
+  let productoInternoId = productoCache.get(cacheKey);
+
+  if (productoInternoId === undefined) {
+    console.log(`Resolviendo producto para: ${nombreProducto} en empresa: ${nombreEmpresa}`);
+    productoInternoId = await Empresa.getProductoInternoByEmpresaYProducto(
+      nombreEmpresa,
+      nombreProducto
+    );
+    productoCache.set(cacheKey, productoInternoId); // guarda incluso null
+  }
+
+  if (!productoInternoId) {
+    const motivo = "Sin mapeo interno";
+    console.warn(`Fila omitida: ${nombreProducto} (empresa: ${nombreEmpresa}) - ${motivo}`);
+    const key = `${nombreEmpresa}:${nombreProducto}:${motivo}`;
+    resumenOmitidos.set(key, {
+      empresa: nombreEmpresa,
+      producto: nombreProducto,
+      motivo,
+      cantidad: (resumenOmitidos.get(key)?.cantidad || 0) + 1
+    });
+    continue;
+  }
+
+  fila.producto_id = productoInternoId;
+
   if (fila.codigo && fila.producto_id) {
     batch.push(fila);
 
+    // 👇 contar como insertable (aunque el batch se inserta después)
+    const key = `${nombreEmpresa}:${nombreProducto}`;
+    resumenInsertados.set(key, {
+      empresa: nombreEmpresa,
+      producto: nombreProducto,
+      cantidad: (resumenInsertados.get(key)?.cantidad || 0) + 1
+    });
+
     if (batch.length >= BATCH_SIZE) {
-      const resInsert = await insertarLote(batch);
-      totalInsertados += resInsert.affectedRows;
-      batch = [];
+      try {
+        const resInsert = await insertarLote(batch);
+        totalInsertados += resInsert.affectedRows;
+      } catch (err) {
+        console.error(`❌ Error al insertar lote: ${err.message}`);
+      } finally {
+        batch = [];
+      }
     }
   }
 }
 
+// insertar último batch pendiente
+if (batch.length) {
+  try {
+    const resInsert = await insertarLote(batch);
+    totalInsertados += resInsert.affectedRows;
+  } catch (err) {
+    console.error(`❌ Error al insertar último lote: ${err.message}`);
+  }
+}
 
+await fs.promises.unlink(filePath);
 
-    // 6. Insertar último lote pendiente
-    if (batch.length) {
-      const resInsert = await insertarLote(batch);
-      totalInsertados += resInsert.affectedRows;
-    }
+// convertir Map → array para respuesta JSON
+const insertadosArray = Array.from(resumenInsertados.values());
+const omitidosArray = Array.from(resumenOmitidos.values());
 
-    // 7. Eliminar archivo temporal
-    await fs.promises.unlink(filePath);
-
-    // 8. Respuesta final
-    res.json({
-      mensaje: 'Carga completada',
-      total: totalFilas,
-      insertados: totalInsertados,
-      omitidos: totalFilas - totalInsertados
-    });
+res.json({
+  mensaje: "Carga completada",
+  total: totalFilas,
+  insertados: totalInsertados,
+  resumen_insertados: insertadosArray,
+  resumen_omitidos: omitidosArray
+});
 
   } catch (err) {
     console.error('❌ Error general en carga masiva:', err);

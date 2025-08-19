@@ -115,32 +115,40 @@ const getProductoInternoId = async (empresaId, woocommerceId, wooProductData) =>
 
 const getProductoInternoByEmpresaYProducto = async (nombreEmpresa, nombreProducto) => {
   console.log('🔍 Buscando producto interno para empresa:', nombreEmpresa, 'producto:', nombreProducto);
-  try {
-    // 1. Empresa
-    const empresaId = await getEmpresaByName(nombreEmpresa);
-    console.log('Empresa ID:', empresaId);
-    if (!empresaId) throw new Error(`Empresa no encontrada: ${nombreEmpresa}`);
 
-    // 2. Tienda
-    const tiendaId = await getTiendaIdByEmpresaName(nombreEmpresa);
-    console.log('Tienda ID:', tiendaId);
-    if (!tiendaId) throw new Error(`No se encontró tienda para empresa: ${nombreEmpresa}`);
-    
-    // 3. Producto externo
-    const productoExternoId = await getProductoAuxByNombreAndIdWoo(tiendaId, nombreProducto);
-    console.log('Producto externo ID:', productoExternoId);
-    if (!productoExternoId) throw new Error(`Producto no encontrado en tienda: ${nombreProducto}`);
-
-    // 4. Producto interno
-    const productoInternoId = await getProductoInternoId(empresaId, tiendaId, productoExternoId);
-    console.log('Producto interno ID:', productoInternoId);
-    if (!productoInternoId) throw new Error(`No existe mapeo interno para producto: ${nombreProducto}`);
-
-    return productoInternoId;
-  } catch (error) {
-    console.error("Error en getProductoInternoByEmpresaYProducto:", error.message);
-    throw error;
+  // 1. Empresa
+  const empresaId = await getEmpresaByName(nombreEmpresa);
+  console.log('Empresa ID:', empresaId);
+  if (!empresaId) {
+    console.warn(`⚠️ Empresa no encontrada: ${nombreEmpresa}`);
+    return null;
   }
+
+  // 2. Tienda
+  const tiendaId = await getTiendaIdByEmpresaName(nombreEmpresa);
+  console.log('Tienda ID:', tiendaId);
+  if (!tiendaId) {
+    console.warn(`⚠️ No se encontró tienda para empresa: ${nombreEmpresa}`);
+    return null;
+  }
+    
+  // 3. Producto externo
+  const productoExternoId = await getProductoAuxByNombreAndIdWoo(tiendaId, nombreProducto);
+  console.log('Producto externo ID:', productoExternoId);
+  if (!productoExternoId || (Array.isArray(productoExternoId) && productoExternoId.length === 0)) {
+    console.warn(`⚠️ Producto no encontrado en tienda: ${nombreProducto}`);
+    return null;
+  }
+
+  // 4. Producto interno
+  const productoInternoId = await getProductoInternoId(empresaId, tiendaId, productoExternoId);
+  console.log('Producto interno ID:', productoInternoId);
+  if (!productoInternoId) {
+    console.warn(`⚠️ No existe mapeo interno para producto: ${nombreProducto}`);
+    return null;
+  }
+
+  return productoInternoId;
 };
 
 // Actualizar una empresa
