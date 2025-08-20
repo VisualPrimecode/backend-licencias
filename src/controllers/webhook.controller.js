@@ -280,13 +280,7 @@ async function validarPedidoWebhook(data, wooId, registrarEnvioError) {
 
   // 3. Validar estado del pedido
   if (data.status !== 'completed' && data.status !== 'processing') {
-    await registrarEnvioError({
-      woo_config_id: wooId,
-      numero_pedido: data.number,
-      motivo_error: 'IGNORED_STATUS',
-      detalles_error: `Estado recibido: ${data.status}`
-    });
-
+   
     console.log(`⚠️ Pedido ignorado: estado = ${data.status}`);
 
     const err = new Error(`Pedido ignorado, estado: ${data.status}`);
@@ -303,12 +297,7 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
   const yaExiste = await Envio.existeEnvioPorPedidoWoo(numero_pedido, wooId);
 
   if (yaExiste) {
-    await registrarEnvioError({
-      empresa_id,
-      usuario_id,
-      numero_pedido,
-      motivo_error: 'PEDIDO_DUPLICADO'
-    });
+
     console.warn(`📦 Pedido duplicado detectado (numero_pedido: ${numero_pedido}, woo_id: ${wooId})`);
 
     const err = new Error('Pedido ya procesado anteriormente. Ignorado para evitar duplicado.');

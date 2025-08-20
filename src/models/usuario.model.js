@@ -4,6 +4,16 @@ const jwt = require('jsonwebtoken');
 
 
 const getAllUsuarios = async () => {
+  console.log('Obteniendo todos los usuarios...modelo');
+  const [rows] = await db.query(`
+    SELECT 
+      id AS usuario_id,
+      nombre AS nombre_usuario,
+      email,
+      rol
+    FROM usuarios
+  `);
+  /*
   const [rows] = await db.query(`
     SELECT DISTINCT 
       u.id AS usuario_id,
@@ -11,7 +21,7 @@ const getAllUsuarios = async () => {
       u.email,
       u.rol
     FROM correos_dinamicos.usuarios u
-  `);
+  `);*/
   return rows;
 };
 
