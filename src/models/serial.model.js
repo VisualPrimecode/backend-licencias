@@ -168,7 +168,7 @@ const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad,
       `SELECT id, codigo
        FROM seriales
        WHERE producto_id = ?
-         
+         AND woocommerce_id = ?
          AND estado = 'disponible'
        ORDER BY fecha_ingreso ASC
        LIMIT ?
@@ -219,6 +219,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
       `SELECT id, codigo
        FROM seriales
        WHERE producto_id = ?
+         AND woocommerce_id = ?
          AND estado = 'disponible'
        ORDER BY fecha_ingreso ASC
        LIMIT 1
