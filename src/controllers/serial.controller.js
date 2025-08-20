@@ -36,21 +36,22 @@ exports.getSerialById = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener serial' });
   }
 };
-
-// Crear un nuevo serial
 exports.createSerial = async (req, res) => {
+  console.log("➡️ Entró en create serial");
+  console.log(req.body);
   try {
     const {
       codigo,
       producto_id,
       estado = 'disponible',
       observaciones,
-      usuario_id
+      usuario_id,
+      tienda_woo_id // 👈 viene del front
     } = req.body;
 
     // Validaciones mínimas
-    if (!codigo || !producto_id) {
-      return res.status(400).json({ error: 'Código y producto_id son obligatorios' });
+    if (!codigo || !producto_id || !tienda_woo_id) {
+      return res.status(400).json({ error: 'Código, producto_id y tienda_woo_id son obligatorios' });
     }
 
     const estadosValidos = ['disponible', 'asignado', 'ENVIADO', 'agotado'];
@@ -58,12 +59,14 @@ exports.createSerial = async (req, res) => {
       return res.status(400).json({ error: 'Estado no válido' });
     }
 
+    // 👇 aquí hacemos el mapping a lo que espera el modelo
     const id = await Serial.createSerial({
       codigo,
       producto_id,
       estado,
       observaciones,
-      usuario_id
+      usuario_id,
+      woocommerce_id: tienda_woo_id, // 👈 se transforma antes de pasar al modelo
     });
 
     res.status(201).json({ id });
@@ -106,6 +109,45 @@ exports.updateSerial = async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar serial' });
   }
 };
+
+exports.updateSerialController2 = async (req, res) => {
+  console.log("➡️ Entró en update serial");
+  try {
+    const { id } = req.params;
+    const {
+      codigo,
+      producto_id,
+      estado,
+      observaciones,
+      usuario_id,
+      tienda_woo_id // 👈 viene del front
+    } = req.body;
+
+    console.log("id", id);
+    console.log("datos", req.body);
+
+    const serial = await Serial.getSerialById(id);
+    if (!serial) {
+      return res.status(404).json({ error: 'Serial no encontrado' });
+    }
+
+    await Serial.updateSerial(id, {
+      codigo,
+      producto_id,
+      estado,
+      observaciones,
+      usuario_id,
+      woocommerce_id: tienda_woo_id, // 👈 mapping al modelo
+    });
+
+    res.json({ mensaje: 'Serial actualizado correctamente' });
+  } catch (error) {
+    console.error('❌ Error al actualizar serial:', error);
+    res.status(500).json({ error: 'Error al actualizar serial' });
+  }
+};
+
+
 
 // Eliminar un serial
 exports.deleteSerial = async (req, res) => {

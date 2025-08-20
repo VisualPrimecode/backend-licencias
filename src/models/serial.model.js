@@ -18,15 +18,17 @@ const createSerial = async ({
   producto_id,
   estado = 'disponible',
   observaciones,
-  usuario_id
+  usuario_id,
+  woocommerce_id // 👈 nuevo campo
 }) => {
   const [result] = await db.query(
-    `INSERT INTO seriales (codigo, producto_id, estado, observaciones, usuario_id)
-     VALUES (?, ?, ?, ?, ?)`,
-    [codigo, producto_id, estado, observaciones, usuario_id]
+    `INSERT INTO seriales (codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id]
   );
   return result.insertId;
 };
+
 
 // Actualizar un serial
 const updateSerial = async (id, {
@@ -41,6 +43,28 @@ const updateSerial = async (id, {
      SET codigo = ?, producto_id = ?, estado = ?, observaciones = ?, usuario_id = ?
      WHERE id = ?`,
     [codigo, producto_id, estado, observaciones, usuario_id, id]
+  );
+  return result;
+};
+
+const updateSerial2 = async (id, {
+  codigo,
+  producto_id,
+  estado,
+  observaciones,
+  usuario_id,
+  woocommerce_id // 👈 nuevo campo
+}) => {
+  const [result] = await db.query(
+    `UPDATE seriales
+     SET codigo = ?, 
+         producto_id = ?, 
+         estado = ?, 
+         observaciones = ?, 
+         usuario_id = ?, 
+         woocommerce_id = ? 
+     WHERE id = ?`,
+    [codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id, id]
   );
   return result;
 };

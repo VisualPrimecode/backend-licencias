@@ -2,6 +2,7 @@ const Plantilla = require('../models/plantilla.model');
 
 // Obtener todas las plantillas
 exports.getPlantillas = async (req, res) => {
+  console.log('entro en plantill all')
   try {
     const plantillas = await Plantilla.getAllPlantillas();
     res.json(plantillas);
@@ -32,7 +33,8 @@ exports.getPlantillaById = async (req, res) => {
 
 // Obtener una plantilla por ID de empresa
 exports.getPlantillaByIdEmpresa = async (req, res) => {
-  // console.log('entro en plantill by id empresa',req.params);
+  
+   console.log('entro en plantill by id empresa',req.params);
   try {
     const { id } = req.params;
     const plantilla = await Plantilla.getPlantillaByIdEmpresa(id);
@@ -77,6 +79,7 @@ exports.getPlantillaByIdProductoWooController = async (req, res) => {
 
 // Obtener una plantilla por ID de woo
 exports.getPlantillaByWooAndMotivo = async (req, res) => {
+  console.log('entro en plantill by woo y motivo')
   try {
     const { woo_id, motivo } = req.params;
 
@@ -147,6 +150,7 @@ exports.createPlantilla = async (req, res) => {
 
 // Actualizar plantilla existente
 exports.updatePlantilla = async (req, res) => {
+  console.log('Iniciando solicitud para actualizar una plantilla');
   try {
     const { id } = req.params;
 
@@ -188,6 +192,7 @@ exports.updatePlantilla = async (req, res) => {
 
 // Eliminar plantilla
 exports.deletePlantilla = async (req, res) => {
+  console.log('Iniciando solicitud para eliminar una plantilla');
   try {
     const { id } = req.params;
 
