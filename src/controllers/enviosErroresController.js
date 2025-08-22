@@ -2,6 +2,7 @@ const EnviosErrores = require('../models/enviosErrores.model');
 
 // Obtener todos los envíos con errores
 exports.getEnviosErrores = async (req, res) => {
+  console.log("Obteniendo todos los envíos con errores...");
   try {
     const envios = await EnviosErrores.getAllEnviosErrores();
     res.json(envios);

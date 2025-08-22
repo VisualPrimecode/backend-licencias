@@ -111,7 +111,7 @@ exports.updateSerial = async (req, res) => {
 };
 
 exports.updateSerialController2 = async (req, res) => {
-  console.log("➡️ Entró en update serial");
+  console.log("➡️ Entró en update serial2");
   try {
     const { id } = req.params;
     const {
@@ -131,7 +131,7 @@ exports.updateSerialController2 = async (req, res) => {
       return res.status(404).json({ error: 'Serial no encontrado' });
     }
 
-    await Serial.updateSerial(id, {
+    await Serial.updateSerial2(id, {
       codigo,
       producto_id,
       estado,

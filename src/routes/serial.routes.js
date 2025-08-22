@@ -18,8 +18,16 @@ router.get('/:id', serialController.getSerialById);
 // Crear un nuevo serial
 router.post('/', serialController.createSerial);
 
+// Variante 2 primero (más específica)
+router.put('/updated2/:id', serialController.updateSerialController2);
+
+// Ruta genérica después
+router.put('/:id', serialController.updateSerial);
+
+
 // Actualizar un serial existente
 router.put('/:id', serialController.updateSerial);
+
 
 // Eliminar un serial
 router.delete('/:id', serialController.deleteSerial);

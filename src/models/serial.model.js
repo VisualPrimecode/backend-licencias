@@ -2,9 +2,10 @@ const db = require('../config/db');
 
 // Obtener todos los seriales
 const getAllSeriales = async () => {
-  const [rows] = await db.query('SELECT * FROM seriales');
+  const [rows] = await db.query('SELECT * FROM seriales ORDER BY id DESC');
   return rows;
 };
+
 
 // Obtener un serial por ID
 const getSerialById = async (id) => {
@@ -55,22 +56,37 @@ const updateSerial2 = async (id, {
   usuario_id,
   woocommerce_id // 👈 nuevo campo
 }) => {
-  const [result] = await db.query(
-    `UPDATE seriales
-     SET codigo = ?, 
-         producto_id = ?, 
-         estado = ?, 
-         observaciones = ?, 
-         usuario_id = ?, 
-         woocommerce_id = ? 
-     WHERE id = ?`,
-    [codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id, id]
-  );
+  console.log("Actualizando serial con ID:", id);
+  console.log("Datos a actualizar:",codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id);
+  console.log("typeof woocommerce_id:", typeof woocommerce_id, "valor:", woocommerce_id);
+console.log("typeof id:", typeof id, "valor:", id);
+
+ const [result] = await db.query(
+  `UPDATE seriales
+   SET codigo = ?, 
+       producto_id = ?, 
+       estado = ?, 
+       observaciones = ?, 
+       usuario_id = ?, 
+       woocommerce_id = ? 
+   WHERE id = ?`,
+  [
+    codigo,
+    producto_id,
+    estado,
+    observaciones,
+    usuario_id,
+    woocommerce_id,
+    Number(id)   // 👈 forzamos a number
+  ]
+);
+
   return result;
 };
 
 // Eliminar un serial
 const deleteSerial = async (id) => {
+  console.log("Eliminando serial con ID:", id);
   const [result] = await db.query('DELETE FROM seriales WHERE id = ?', [id]);
   return result;
 };/*
@@ -324,6 +340,8 @@ module.exports = {
   getSerialById,
   createSerial,
   updateSerial,
+    updateSerial2,
+
   deleteSerial,
   insertarSerialesMasivos,
   obtenerSerialesDisponibles,
