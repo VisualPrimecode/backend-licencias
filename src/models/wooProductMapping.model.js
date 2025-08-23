@@ -91,7 +91,7 @@ const getProductoInternoId = async (woocommerce_id, woo_product_id) => {
     console.log('Resultado de la consulta:', rows[0].producto_interno_id);
     return rows.length > 0 ? rows[0].producto_interno_id : null;
   } catch (error) {
-    throw new Error('Error al buscar producto interno: ' + error.message);
+    throw new Error('Error al buscar producto interno, probablemente falta mapear el producto: ' + error.message);
   }
 };
 const getProductoInternoByNombreYWooId = async (nombreProducto, woocommerce_id) => {
@@ -129,7 +129,7 @@ const getProductoInternoByNombreYWooId = async (nombreProducto, woocommerce_id) 
 
     return mapRows.length > 0 ? mapRows[0].producto_interno_id : null;
   } catch (error) {
-    throw new Error('Error al buscar producto interno: ' + error.message);
+    throw new Error('Error al buscar producto interno, probablemente falta mapear el producto: ' + error.message);
   }
 };
 

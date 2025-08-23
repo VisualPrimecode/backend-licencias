@@ -2,9 +2,19 @@ const db = require('../config/db');
 
 // Obtener todos los envíos con errores
 const getAllEnviosErrores = async () => {
-  const [rows] = await db.query('SELECT * FROM envios_errores');
+  const [rows] = await db.query(`
+    SELECT ee.*, 
+           p.nombre AS nombre_producto, 
+           e.nombre AS nombre_empresa
+    FROM envios_errores ee
+    LEFT JOIN productos p ON ee.producto_id = p.id
+    LEFT JOIN empresas e ON ee.empresa_id = e.id
+    ORDER BY ee.id DESC
+    LIMIT 50
+  `);
   return rows;
 };
+
 
 // Obtener un envío con error por ID
 const getEnvioErrorById = async (id) => {

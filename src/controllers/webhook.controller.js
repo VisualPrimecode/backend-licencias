@@ -538,7 +538,7 @@ if (!smtpConfig) {
   await registrarEnvioError({
     woo_config_id: wooId,
     numero_pedido: data?.number || null,
-    motivo_error: 'UNEXPECTED_EXCEPTION',
+    motivo_error: 'ERROR_ENVIO_AUTOMATICO',
     detalles_error: error.stack || error.message
   });
   

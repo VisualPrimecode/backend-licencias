@@ -301,6 +301,19 @@ const getEmpresaYUsuarioByWooConfigId = async (configId) => {
   );
   return rows[0]; // asumimos que solo nos interesa el primero
 };
+const getEmpresaByWooConfigId = async (configId) => {
+  const [rows] = await db.query(
+    `
+    SELECT e.nombre AS nombre_empresa
+    FROM woocommerce_api_config w
+    INNER JOIN empresas e ON w.empresa_id = e.id
+    WHERE w.id = ?
+    LIMIT 1
+    `,
+    [configId]
+  );
+  return rows[0]; // solo la empresa asociada
+};
 
 
 module.exports = {
@@ -318,5 +331,6 @@ module.exports = {
   getEmpresaYUsuarioByWooConfigId,
   getEmpresaNameById,
   getEmpresaByName,
-  getProductoInternoByEmpresaYProducto
+  getProductoInternoByEmpresaYProducto,
+  getEmpresaByWooConfigId
 };

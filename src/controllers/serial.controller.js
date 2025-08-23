@@ -1,5 +1,6 @@
 const Serial = require('../models/serial.model');
 const Empresa = require('../models/empresa.model');
+const {getEmpresaByWooConfigId}= require('../models/empresa.model');
 const fs = require('fs');
 const path = require('path');
 const csv = require('csv-parser');
@@ -763,7 +764,6 @@ exports.obtenerSerialDisponible = async (req, res) => {
   }
 };*/
 async function registrarErrorEnvio({ reqBody, motivo_error, detalles_error }) {
-  console.log("Intento de crear registro de error...");
   console.log(reqBody);
   console.log(motivo_error);
   console.log(detalles_error);
@@ -893,10 +893,11 @@ exports.obtenerSerialesDisponibles = async (req, res) => {
     );
 
     if (!seriales || seriales.length === 0) {
+      const nombretienda = await getEmpresaByWooConfigId(woocommerce_id);
       await registrarErrorEnvio({
         reqBody: { producto_id, woocommerce_id, cantidad, numeroPedido },
         motivo_error: 'Seriales no disponibles',
-        detalles_error: `No hay ${cantidad} seriales disponibles para producto_id=${producto_id} y woocommerce_id=${woocommerce_id}`
+        detalles_error: `No hay ${cantidad} seriales disponibles para producto_id=${producto_id} y tienda=${nombretienda}`
       });
       return res.status(404).json({ error: 'No hay suficientes seriales disponibles para este producto y woocommerce' });
     }
