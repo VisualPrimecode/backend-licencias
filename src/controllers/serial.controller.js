@@ -893,12 +893,14 @@ exports.obtenerSerialesDisponibles = async (req, res) => {
     );
 
     if (!seriales || seriales.length === 0) {
-      const nombretienda = await getEmpresaByWooConfigId(woocommerce_id);
-      await registrarErrorEnvio({
-        reqBody: { producto_id, woocommerce_id, cantidad, numeroPedido },
-        motivo_error: 'Seriales no disponibles',
-        detalles_error: `No hay ${cantidad} seriales disponibles para producto_id=${producto_id} y tienda=${nombretienda}`
-      });
+     const tienda = await getEmpresaByWooConfigId(woocommerce_id);
+
+await registrarErrorEnvio({
+  reqBody: { producto_id, woocommerce_id, cantidad, numeroPedido },
+  motivo_error: 'Seriales no disponibles',
+  detalles_error: `No hay ${cantidad} seriales disponibles para producto_id=${producto_id} y tienda=${tienda?.nombre_empresa || 'Desconocida'}`
+});
+
       return res.status(404).json({ error: 'No hay suficientes seriales disponibles para este producto y woocommerce' });
     }
 
