@@ -308,6 +308,31 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
 
   return false; // No es duplicado
 }
+// Revertir seriales a "disponible"
+async function revertirSeriales(productos) {
+  if (!Array.isArray(productos)) return;
+
+  for (const producto of productos) {
+    if (!Array.isArray(producto.seriales)) continue;
+
+    for (const serial of producto.seriales) {
+      try {
+        await updateSerial2(serial.id_serial, {
+          codigo: serial.codigo,
+          producto_id: producto.producto_id,
+          estado: 'disponible',          // 👈 revertimos estado
+          observaciones: 'Rollback por error en envío',
+          usuario_id: null,              // o quien hizo la operación fallida
+          woocommerce_id: null           // limpiamos si es necesario
+        });
+      } catch (err) {
+        console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
+        // Aquí podrías registrar el fallo en registrarErrorEnvio
+      }
+    }
+  }
+}
+
 async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numero_pedido, registrarEnvioError) {
   const productosProcesados = [];
   const items = Array.isArray(lineItems) ? lineItems : [];

@@ -8,6 +8,7 @@ router.post('/carga-masiva', upload.single('archivo'), serialController.cargaMas
 
 // Ruta previsualizacion de carga masiva de seriales
 router.post('/prev-carga-masiva', upload.single('archivo'), serialController.previsualizarSeriales);
+router.get('/obtener-seriales-pedido/:id', serialController.getSerialesPorPedido);
 
 // Obtener todos los seriales
 router.get('/', serialController.getSeriales);
@@ -18,11 +19,12 @@ router.get('/:id', serialController.getSerialById);
 // Crear un nuevo serial
 router.post('/', serialController.createSerial);
 
+
 // Variante 2 primero (más específica)
 router.put('/updated2/:id', serialController.updateSerialController2);
 
 // Ruta genérica después
-router.put('/:id', serialController.updateSerial);
+router.put('/estado/:id', serialController.updateSerialEstado);
 
 
 // Actualizar un serial existente

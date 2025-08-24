@@ -12,6 +12,10 @@ const getSerialById = async (id) => {
   const [rows] = await db.query('SELECT * FROM seriales WHERE id = ?', [id]);
   return rows[0];
 };
+const getSerialesByNumeroPedido = async (id) => {
+  const [rows] = await db.query('SELECT * FROM seriales WHERE numero_pedido = ?', [id]);
+  return rows;
+};
 
 // Crear un nuevo serial
 const createSerial = async ({
@@ -48,6 +52,18 @@ const updateSerial = async (id, {
   return result;
 };
 
+const updateSerialEstado = async (id, {
+  estado,observaciones,numero_pedido, numero_envio, usuario_id
+}) => {
+  const [result] = await db.query(
+    `UPDATE seriales
+     SET estado = ?, observaciones = ?, numero_pedido = ?, numero_envio = ?, usuario_id = ?
+     WHERE id = ?`,
+    [estado,observaciones, numero_pedido, numero_envio, usuario_id, id]
+  );
+  return result;
+};
+
 const updateSerial2 = async (id, {
   codigo,
   producto_id,
@@ -64,7 +80,6 @@ console.log("typeof id:", typeof id, "valor:", id);
  const [result] = await db.query(
   `UPDATE seriales
    SET codigo = ?, 
-       producto_id = ?, 
        estado = ?, 
        observaciones = ?, 
        usuario_id = ?, 
@@ -72,7 +87,6 @@ console.log("typeof id:", typeof id, "valor:", id);
    WHERE id = ?`,
   [
     codigo,
-    producto_id,
     estado,
     observaciones,
     usuario_id,
@@ -320,6 +334,16 @@ const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
 
     // 2. Buscar seriales disponibles asociados a ese producto
     const [seriales] = await db.query(
+  `SELECT id, producto_id, codigo 
+   FROM seriales 
+   WHERE producto_id = ? AND estado = 'disponible' 
+   ORDER BY fecha_ingreso ASC 
+   LIMIT ?`,
+  [productoInternoId, cantidad]
+);
+
+    /*
+    const [seriales] = await db.query(
       `SELECT id, codigo 
        FROM seriales 
        WHERE producto_id = ? AND estado = 'disponible' 
@@ -327,7 +351,7 @@ const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
        LIMIT ?`,
       [productoInternoId, cantidad]
     );
-
+*/
     return { error: false, seriales };
   } catch (err) {
     console.error("Error en getSerialesByWooData:", err);
@@ -341,13 +365,13 @@ module.exports = {
   createSerial,
   updateSerial,
     updateSerial2,
-
+getSerialesByNumeroPedido,
   deleteSerial,
   insertarSerialesMasivos,
   obtenerSerialesDisponibles,
     obtenerSerialDisponible2,
     precargarWooIdsPorEmpresa,
-    getSerialesByWooData
+    getSerialesByWooData,
 
-
+  updateSerialEstado
 };

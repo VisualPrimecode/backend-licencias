@@ -37,6 +37,23 @@ exports.getSerialById = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener serial' });
   }
 };
+
+// Obtener un serial por ID
+exports.getSerialesPorPedido = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const serial = await Serial.getSerialesByNumeroPedido(id);
+
+    if (!serial) {
+      return res.status(404).json({ error: 'Serial no encontrado' });
+    }
+
+    res.json(serial);
+  } catch (error) {
+    console.error('❌ Error al obtener serial:', error);
+    res.status(500).json({ error: 'Error al obtener serial' });
+  }
+};
 exports.createSerial = async (req, res) => {
   console.log("➡️ Entró en create serial");
   console.log(req.body);
@@ -110,6 +127,42 @@ exports.updateSerial = async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar serial' });
   }
 };
+
+
+// Actualizar un serial
+exports.updateSerialEstado = async (req, res) => {
+  console.log("entro en updateestado serial");
+  try {
+    const { id } = req.params;
+    const {
+      estado,
+      observaciones,
+      numero_pedido,
+      numero_envio,
+      usuario_id
+    } = req.body;
+    console.log ("id",id);
+    console.log("datos",req.body);
+    const serial = await Serial.getSerialById(id);
+    if (!serial) {
+      return res.status(404).json({ error: 'Serial no encontrado' });
+    }
+
+    await Serial.updateSerialEstado(id, {
+      estado,
+      observaciones,
+      numero_pedido,
+      numero_envio,
+      usuario_id
+    });
+
+    res.json({ mensaje: 'Serial actualizado correctamente' });
+  } catch (error) {
+    console.error('❌ Error al actualizar serial:', error);
+    res.status(500).json({ error: 'Error al actualizar serial' });
+  }
+};
+
 
 exports.updateSerialController2 = async (req, res) => {
   console.log("➡️ Entró en update serial2");

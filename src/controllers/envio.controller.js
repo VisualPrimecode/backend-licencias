@@ -123,7 +123,7 @@ async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody) {
 
   const plantilla = await getPlantillaConFallback(producto_id, woocommerce_id, empresa_id);
   if (!plantilla) {
-   
+    
     throw new Error(`No se encontró plantilla para el producto ${nombre_producto || producto_id}.`);
   }
 
@@ -168,6 +168,30 @@ async function obtenerSMTPConfig(woocommerce_id) {
     pass: config.smtp_password
   };
 }
+// Revertir seriales a "disponible"
+async function revertirSeriales(productos, woocommerce_id) {
+  if (!Array.isArray(productos)) return;
+
+  for (const producto of productos) {
+    if (!Array.isArray(producto.seriales)) continue;
+
+    for (const serial of producto.seriales) {
+      try {
+        await Serial.updateSerial2(serial.id_serial, {
+          codigo: serial.codigo,
+          producto_id: producto.producto_id,
+          estado: 'disponible', // 👈 revertimos solo el estado
+          observaciones: 'Rollback por error en envío',
+          usuario_id: null,     // lo podés decidir: mantener o resetear
+          woocommerce_id        // 👈 se pasa desde arriba, no desde el serial
+        });
+      } catch (err) {
+        console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
+      }
+    }
+  }
+}
+
 
 
 // 🔹 Controlador principal con registro de errores en el catch
@@ -183,8 +207,17 @@ exports.createEnvio = async (req, res) => {
 
     const productosProcesados = [];
     for (const producto of productos) {
-      const procesado = await procesarProducto(producto, woocommerce_id, empresa_id, req.body);
-      productosProcesados.push(procesado);
+      try {
+        const procesado = await procesarProducto(producto, woocommerce_id, empresa_id, req.body);
+        productosProcesados.push(procesado);
+      } catch (errorProducto) {
+        console.error('❌ Error procesando producto:', errorProducto.message);
+        // ⚠️ Si falla algún producto → rollback de seriales de todos los productos recibidos
+        if (req.body?.productos) {
+          await revertirSeriales(req.body.productos, req.body.woocommerce_id);
+        }
+        throw errorProducto;
+      }
     }
 
     const envioData = {
@@ -208,6 +241,12 @@ exports.createEnvio = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error al crear envío multiproducto:', error);
+
+    // ⚠️ ROLLBACK global por si no entró al bloque interno
+    if (req.body?.productos) {
+      await revertirSeriales(req.body.productos, req.body.woocommerce_id);
+    }
+
     // 📌 Registro de error global
     await registrarErrorEnvio({
       reqBody: req.body,
@@ -219,160 +258,12 @@ exports.createEnvio = async (req, res) => {
   }
 };
 
-
-/*
-exports.createEnvio = async (req, res) => {
-  console.log('📦 Creando nuevo envío multiproducto...');
-  console.log('Datos recibidos:', req.body);
-
-  try {
-    const {
-      empresa_id,
-      usuario_id,
-      productos,
-      woocommerce_id,
-      nombre_cliente,
-      email_cliente,
-      numero_pedido
-    } = req.body;
-
-    // ✅ Validaciones básicas
-    if (
-      !empresa_id ||
-      !usuario_id ||
-      !Array.isArray(productos) ||
-      productos.length === 0
-    ) {
-      return res.status(400).json({
-        error: 'Faltan campos obligatorios o lista de productos vacía.'
-      });
-    }
-
-    const empresaName = await getEmpresaNameById(empresa_id);
-
-    const productosProcesados = [];
-
-    for (const producto of productos) {
-        console.log('📌 Extra options recibidos:', JSON.stringify(producto.extra_options, null, 2));
-
-  // 🆕 Procesar posibles productos extra en extra_options
-  if (Array.isArray(producto.extra_options)) {
-    const extrasCompraCon = producto.extra_options.filter(opt =>
-      typeof opt.name === 'string' &&
-      opt.name.toLowerCase().includes('compra con')
-    );
-
-    for (const extra of extrasCompraCon) {
-      const nombreExtraProducto = extra.value?.trim();
-      if (nombreExtraProducto) {
-        try {
-          const idInternoExtra = await getProductoInternoByNombreYWooId(nombreExtraProducto, woocommerce_id);
-          console.log(`🛒 Producto extra detectado: "${nombreExtraProducto}" → ID interno: ${idInternoExtra ?? 'No encontrado'}`);
-        } catch (err) {
-          console.error(`⚠️ Error buscando ID interno para producto extra "${nombreExtraProducto}":`, err.message);
-        }
-      }
-    }
-  }
-      const {
-        producto_id,
-        woo_producto_id,
-        nombre_producto,
-        seriales
-      } = producto;
-
-      // 🔎 Validar seriales
-      if (!Array.isArray(seriales) || seriales.length === 0) {
-        return res.status(400).json({
-          error: `El producto ${nombre_producto || producto_id} no contiene seriales válidos.`
-        });
-      }
-
-      // 🔎 Validar que cada serial tenga los campos requeridos
-      const serialesValidos = seriales.every(s => s.codigo && s.id_serial);
-      if (!serialesValidos) {
-        return res.status(400).json({
-          error: `Seriales inválidos en el producto ${nombre_producto || producto_id}.`
-        });
-      }
-      console.log('va a entrar en el getplantillaconfallbavk')
-
-      // 📄 Obtener plantilla asociada al producto
-      const plantilla = await getPlantillaConFallback(producto_id, woocommerce_id, empresa_id);
-
-if (!plantilla) {
-  return res.status(400).json({
-    error: `No se encontró plantilla para el producto ${nombre_producto || producto_id}.`
-  });
-}
-
-      console.log('despues de getplantillaconfallbavk')
-
-      productosProcesados.push({
-        producto_id,
-        woo_producto_id,
-        nombre_producto,
-        plantilla,
-        seriales // ✅ Se guarda la lista completa de seriales
-      });
-    }
-
-    const envioData = {
-      empresa_id,
-      usuario_id,
-      nombre_cliente,
-      email_cliente,
-      numero_pedido,
-      woocommerce_id,
-      productos: productosProcesados,
-      empresaName,
-      estado: 'pendiente'
-    };
-
-    // 📝 Crear envío en BD
-    const id = await Envio.createEnvio(envioData);
-
-    console.log("id del pedido ? = ", id);
-
-    // 📬 Obtener configuración SMTP
-    const config = await getSMTPConfigByStoreId(woocommerce_id || 3);
-    if (!config) {
-      return res.status(500).json({
-        error: 'No se encontró configuración SMTP activa'
-      });
-    }
-    console.log("hastaaca");
-    const smtpConfig = {
-      host: config.smtp_host,
-      port: config.smtp_port,
-      secure: !!config.smtp_secure,
-      user: config.smtp_username,
-      pass: config.smtp_password
-    };
-
-    // 📤 Encolar envío con productos y sus seriales + plantillas
-    await envioQueue.add({
-      id,
-      ...envioData,
-      smtpConfig
-    });
-        console.log("hastaaca2");
-
-    return res.status(201).json({ id });
-  } catch (error) {
-    console.error('❌ Error al crear envío multiproducto:', error);
-    return res.status(500).json({ error: 'Error interno al crear envío' });
-  }
-};*/
-
-
-
-
-
 //envio cotizacion metodo controller
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización...');
   console.log('Datos de la cotización:', req.body);
+  console.log("Datos de la cotización:", JSON.stringify(req.body, null, 2));
+
 
   try {
     // ✅ Obtener plantilla relacionada a la tienda y motivo 'cotizacion'
@@ -469,7 +360,7 @@ return res.status(201).json({ cotizacion_id: id });
   }
 };
 //envio de productos personalizados
-exports.createCotizacion2 = async (req, res) => { 
+exports.envioProductos = async (req, res) => { 
   console.log('📝 Creando un nuevo envio de productos...');
   console.log('Datos del envio de productos:', req.body);
 
@@ -573,7 +464,7 @@ exports.createCotizacion2 = async (req, res) => {
 
     // 🗂️ Registrar en BD (con estado PENDIENTE)
     const id = await createEnvioPersonalizado({
-      id_usuario: cotizacionData.usuario_id,
+      id_usuario: cotizacionData.user_id,
       id_woo: cotizacionData.woocommerce_id,
       id_empresa: cotizacionData.empresa_id,
       nombre_cliente: cotizacionData.nombre_cliente,

@@ -59,10 +59,24 @@ envioProductosQueue.on('completed', async (job, result) => {
    for (const producto of productos) {
       for (const serial of (producto.seriales || [])) {
         try {
-          await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/seriales/${serial.id}`, {
+          console.log("numero_pedido",job.data.numero_pedido);
+          console.log("serial",serial);
+          console.log("envioProductosId",envioProductosId);
+          
+          await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/seriales/estado/${serial.id}`, {
+             estado: 'asignado',
+            observaciones: `Envio de producto manual, asignado en envío ${envioProductosId}`,
+            numero_envio: envioProductosId || null,
+            usuario_id: job.data.user_id || null
+
+          });/*
+          await axios.put(`http://localhost:3000/api/seriales/estado/${serial.id}`, {
             estado: 'asignado',
-            observaciones: `Asignado en envío ${envioProductosId}`,
-          });
+            observaciones: `Envio de producto manual, asignado en envío ${envioProductosId}`,
+            numero_envio: envioProductosId || null,
+            usuario_id: job.data.user_id || null
+
+          });*/
           console.log(`🔑 Serial ${serial.codigo} actualizado a 'asignado'`);
         } catch (err) {
           console.error(`❌ Error al actualizar serial ${serial.id}:`, err.message);

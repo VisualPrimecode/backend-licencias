@@ -8,13 +8,13 @@ router.get('/', envioController.getEnvios);
 // Obtener un envío por ID
 router.get('/:id', envioController.getEnvioById);
 
-// Crear un nuevo envío
+// Crear un nuevo envío manual pedidos
 router.post('/', envioController.createEnvio);
 
-// Crear un nuevo envío
+// Crear un nuevo envío cotizacion
 router.post('/cotizaciones/', envioController.createCotizacion);
-
-router.post('/envioProductos/', envioController.createCotizacion2);
+//envio personalizado
+router.post('/envioProductos/', envioController.envioProductos);
 
 
 
