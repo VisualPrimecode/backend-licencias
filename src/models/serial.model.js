@@ -79,7 +79,8 @@ console.log("typeof id:", typeof id, "valor:", id);
 
  const [result] = await db.query(
   `UPDATE seriales
-   SET codigo = ?, 
+   SET codigo = ?,
+       producto_id = ?, 
        estado = ?, 
        observaciones = ?, 
        usuario_id = ?, 
@@ -87,6 +88,7 @@ console.log("typeof id:", typeof id, "valor:", id);
    WHERE id = ?`,
   [
     codigo,
+    producto_id,
     estado,
     observaciones,
     usuario_id,
