@@ -67,7 +67,8 @@ envioProductosQueue.on('completed', async (job, result) => {
              estado: 'asignado',
             observaciones: `Envio de producto manual, asignado en envío ${envioProductosId}`,
             numero_envio: envioProductosId || null,
-            usuario_id: job.data.user_id || null
+            usuario_id: job.data.user_id || null,
+            numero_pedido: job.data.numero_pedido || null
 
           });/*
           await axios.put(`http://localhost:3000/api/seriales/estado/${serial.id}`, {
