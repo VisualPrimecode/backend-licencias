@@ -370,7 +370,7 @@ exports.envioProductos = async (req, res) => {
       req.body.woocommerce_id,
       'envioProductos'
     );
-  //  console.log("plantillas obtenidas:", plantillas);
+
     if (!plantillas || plantillas.length === 0) {
       return res.status(404).json({ error: 'No se encontró plantilla para cotización en esta tienda' });
     }
@@ -397,6 +397,11 @@ exports.envioProductos = async (req, res) => {
       });
     }
 
+    // ✅ Validar que haya productos
+    if (!Array.isArray(cotizacionData.productos) || cotizacionData.productos.length === 0) {
+      return res.status(400).json({ error: 'Debe incluir al menos un producto en la cotización' });
+    }
+
     // ✅ Obtener configuración SMTP desde la BD
     const config = await getSMTPConfigByStoreId(cotizacionData.store_id);
     if (!config) {
@@ -416,50 +421,55 @@ exports.envioProductos = async (req, res) => {
     const subtotal = Number((total / 1.19).toFixed(0));
     const iva = total - subtotal;
 
-    // 🔑 Nuevo paso: Obtener seriales para cada producto
+    // 🔑 Nuevo paso: Obtener seriales para cada producto (validación estricta)
     const productosConSerialesYPlantilla = await Promise.all(
-  (cotizacionData.productos || []).map(async (p) => {
-    // 1️⃣ Obtener producto interno a partir del Woo product ID externo
-    const productoInternoId = await WooProductMapping.getProductoInternoId(
-      cotizacionData.woocommerce_id,
-      p.id
+      (cotizacionData.productos || []).map(async (p) => {
+        // 1️⃣ Obtener producto interno
+        const productoInternoId = await WooProductMapping.getProductoInternoId(
+          cotizacionData.woocommerce_id,
+          p.id
+        );
+
+        if (!productoInternoId) {
+          throw new Error(`No se encontró mapping interno para el producto Woo ${p.id}`);
+        }
+
+        // 2️⃣ Obtener seriales
+        const result = await Serial.getSerialesByWooData(
+          cotizacionData.woocommerce_id,
+          p.id,
+          p.cantidad
+        );
+
+        // 3️⃣ Validar cantidad de seriales disponibles
+        if (result.error || !Array.isArray(result.seriales) || result.seriales.length < p.cantidad) {
+          throw new Error(
+            `No se encontraron seriales suficientes para el producto Woo ${p.id}. ` +
+            `Se esperaban ${p.cantidad}, se obtuvieron ${result.seriales ? result.seriales.length : 0}`
+          );
+        }
+
+        // 4️⃣ Obtener plantilla asociada al producto
+        const plantillaProd = await Plantilla.getPlantillaByIdProductoWoo(
+          productoInternoId,
+          cotizacionData.woocommerce_id
+        );
+
+        return {
+          ...p,
+          producto_interno_id: productoInternoId,
+          seriales: result.seriales,
+          plantilla: plantillaProd || null
+        };
+      })
     );
-
-    if (!productoInternoId) {
-      console.warn(`⚠️ No se encontró mapping interno para el producto Woo ${p.id}`);
-      return {
-        ...p,
-        seriales: [],
-        plantilla: null
-      };
-    }
-
-    // 2️⃣ Obtener seriales
-    const result = await Serial.getSerialesByWooData(
-      cotizacionData.woocommerce_id,
-      p.id,
-      p.cantidad
-    );
-
-    // 3️⃣ Obtener plantilla asociada al producto interno
-    const plantilla = await Plantilla.getPlantillaByIdProductoWoo(
-      productoInternoId,
-      cotizacionData.woocommerce_id
-    );
-
-    return {
-      ...p,
-      producto_interno_id: productoInternoId, // opcional: guardar para depuración
-      seriales: result.error ? [] : result.seriales,
-      plantilla: plantilla || null
-    };
-  })
-);
-
-
 
     // 🧾 Construir HTML básico con placeholders (sin reemplazos aún)
-    const cuerpo_html = plantilla.cuerpo_html || '';
+    if (!plantilla.cuerpo_html) {
+      return res.status(400).json({ error: 'La plantilla seleccionada no tiene cuerpo_html definido' });
+    }
+
+    const cuerpo_html = plantilla.cuerpo_html;
     const asunto_correo = plantilla.asunto || 'envioProductos';
 
     // 🗂️ Registrar en BD (con estado PENDIENTE)
@@ -472,7 +482,7 @@ exports.envioProductos = async (req, res) => {
       total,
       subtotal,
       iva,
-      productos_json: productosConSerialesYPlantilla, // 👈 ahora con seriales incluidos
+      productos_json: productosConSerialesYPlantilla, 
       smtp_host: smtpConfig.host,
       smtp_user: smtpConfig.user,
       plantilla_usada: plantilla.id,
@@ -481,12 +491,14 @@ exports.envioProductos = async (req, res) => {
       estado_envio: 'PENDIENTE',
       mensaje_error: null
     });
-console.log("productos con seriales:", JSON.stringify(productosConSerialesYPlantilla, null, 2));
-    // ✅ Encolar el trabajo para el worker con los seriales incluidos
+
+    console.log("productos con seriales:", JSON.stringify(productosConSerialesYPlantilla, null, 2));
+
+    // ✅ Encolar el trabajo para el worker
     await envioProductosQueue.add({
       id,
       ...cotizacionData,
-      productos: productosConSerialesYPlantilla, // 👈 importante
+      productos: productosConSerialesYPlantilla,
       smtpConfig,
       plantilla
     });
@@ -496,11 +508,12 @@ console.log("productos con seriales:", JSON.stringify(productosConSerialesYPlant
 
   } catch (error) {
     console.error('❌ Error al crear cotización:', error);
-    return res.status(500).json({ error: 'Error al crear cotización' });
+    return res.status(400).json({
+      error: 'No se pudo crear la cotización',
+      detalle: error.message || 'Error desconocido'
+    });
   }
 };
-
-
 
 
 // Actualizar un envío existente
