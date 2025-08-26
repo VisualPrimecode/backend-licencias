@@ -105,7 +105,7 @@ async function validarSeriales(seriales, nombreProducto, reqBody) {
     });
     throw new Error(`El producto ${nombreProducto} no contiene seriales válidos.`);
   }
-  if (!seriales.every(s => s.codigo && s.id_serial)) {
+  if (!seriales.every(s => s.codigo )) {
     await registrarErrorEnvio({
       reqBody,
       motivo_error: 'Validación de seriales',

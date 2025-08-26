@@ -1,132 +1,133 @@
 const db = require('../config/db');
 
-// Obtener todos los envíos con errores
-const getAllEnviosProductos = async () => {
-  const [rows] = await db.query(`
-    SELECT ee.*, 
-           p.nombre AS nombre_producto, 
-           e.nombre AS nombre_empresa
-    FROM envios_errores ee
-    LEFT JOIN productos p ON ee.producto_id = p.id
-    LEFT JOIN empresas e ON ee.empresa_id = e.id
-    ORDER BY ee.id DESC
-    LIMIT 50
-  `);
+// Obtener todos los envíos
+const getAllEnvios = async () => {
+  console.log("👉 entro en getAllEnvios");
+  const [rows] = await db.query('SELECT * FROM envios_pesonalizados');
   return rows;
 };
 
-
-// Obtener un envío con error por ID
-const getEnvioErrorById = async (id) => {
-  const [rows] = await db.query('SELECT * FROM envios_errores WHERE id = ?', [id]);
+// Obtener un envío por ID
+const getEnvioById = async (id) => {
+  console.log("👉 entro en getEnvioById");
+  const [rows] = await db.query('SELECT * FROM envios_pesonalizados WHERE id = ?', [id]);
   return rows[0];
 };
 
-// Crear un nuevo registro de envío con error
-const createEnvioError = async ({
-    
-  empresa_id,
-  usuario_id,
-  producto_id,
-  serial_id,
+const getEnviosByIdWoo = async (id_woo) => {
+  const [rows] = await db.query('SELECT * FROM envios_pesonalizados WHERE id_woo = ? order by id desc', [id_woo]);
+  return rows;
+};
+
+// Crear un nuevo envío
+const createEnvio = async ({
+  id_usuario,
+  id_woo,
+  id_empresa,
   nombre_cliente,
-  email_cliente,
-  numero_pedido,
-  estado = 'fallido', // por defecto
-  motivo_error,
-  detalles_error
+  email_destino,
+  total,
+  subtotal,
+  iva,
+  productos_json,
+  smtp_host,
+  smtp_user,
+  plantilla_usada,
+  asunto_correo,
+  cuerpo_html,
+  estado_envio,
+  mensaje_error,
+  fecha_envio
 }) => {
+  console.log("👉 entro en createEnvio");
   const [result] = await db.query(
-    `INSERT INTO envios_errores (
-      empresa_id,
-      usuario_id,
-      producto_id,
-      serial_id,
-      nombre_cliente,
-      email_cliente,
-      numero_pedido,
-      estado,
-      motivo_error,
-      detalles_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO envios_pesonalizados 
+     (id_usuario, id_woo, id_empresa, nombre_cliente, email_destino, total, subtotal, iva, productos_json, smtp_host, smtp_user, plantilla_usada, asunto_correo, cuerpo_html, estado_envio, mensaje_error, fecha_envio)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      empresa_id,
-      usuario_id,
-      producto_id,
-      serial_id,
+      id_usuario,
+      id_woo,
+      id_empresa,
       nombre_cliente,
-      email_cliente,
-      numero_pedido,
-      estado,
-      motivo_error,
-      detalles_error
+      email_destino,
+      total,
+      subtotal,
+      iva,
+      JSON.stringify(productos_json), // aseguramos JSON
+      smtp_host,
+      smtp_user,
+      plantilla_usada,
+      asunto_correo,
+      cuerpo_html,
+      estado_envio || 'PENDIENTE',
+      mensaje_error,
+      fecha_envio
     ]
   );
   return result.insertId;
 };
 
-// Actualizar estado de un envío con error
-const updateEstadoEnvioError = async (id, nuevoEstado) => {
-  await db.query(
-    `UPDATE envios_errores SET estado = ? WHERE id = ?`,
-    [nuevoEstado, id]
-  );
-};
-
-// Actualizar un envío con error
-const updateEnvioError = async (id, {
-  empresa_id,
-  usuario_id,
-  producto_id,
-  serial_id,
+// Actualizar un envío existente
+const updateEnvio = async (id, {
+  id_usuario,
+  id_woo,
+  id_empresa,
   nombre_cliente,
-  email_cliente,
-  numero_pedido,
-  estado,
-  motivo_error,
-  detalles_error
+  email_destino,
+  total,
+  subtotal,
+  iva,
+  productos_json,
+  smtp_host,
+  smtp_user,
+  plantilla_usada,
+  asunto_correo,
+  cuerpo_html,
+  estado_envio,
+  mensaje_error,
+  fecha_envio
 }) => {
+  console.log("👉 entro en updateEnvio");
   const [result] = await db.query(
-    `UPDATE envios_errores SET
-      empresa_id = ?,
-      usuario_id = ?,
-      producto_id = ?,
-      serial_id = ?,
-      nombre_cliente = ?,
-      email_cliente = ?,
-      numero_pedido = ?,
-      estado = ?,
-      motivo_error = ?,
-      detalles_error = ?
-    WHERE id = ?`,
+    `UPDATE envios_pesonalizados 
+     SET id_usuario = ?, id_woo = ?, id_empresa = ?, nombre_cliente = ?, email_destino = ?, total = ?, subtotal = ?, iva = ?, productos_json = ?, smtp_host = ?, smtp_user = ?, plantilla_usada = ?, asunto_correo = ?, cuerpo_html = ?, estado_envio = ?, mensaje_error = ?, fecha_envio = ?
+     WHERE id = ?`,
     [
-      empresa_id,
-      usuario_id,
-      producto_id,
-      serial_id,
+      id_usuario,
+      id_woo,
+      id_empresa,
       nombre_cliente,
-      email_cliente,
-      numero_pedido,
-      estado,
-      motivo_error,
-      detalles_error,
+      email_destino,
+      total,
+      subtotal,
+      iva,
+      JSON.stringify(productos_json),
+      smtp_host,
+      smtp_user,
+      plantilla_usada,
+      asunto_correo,
+      cuerpo_html,
+      estado_envio,
+      mensaje_error,
+      fecha_envio,
       id
     ]
   );
   return result;
 };
 
-// Eliminar un registro de envío con error
-const deleteEnvioError = async (id) => {
-  const [result] = await db.query('DELETE FROM envios_errores WHERE id = ?', [id]);
+// Eliminar un envío
+const deleteEnvio = async (id) => {
+  console.log("👉 entro en deleteEnvio");
+  const [result] = await db.query('DELETE FROM envios_pesonalizados WHERE id = ?', [id]);
   return result;
 };
 
 module.exports = {
-  getAllEnviosProductos,
-  getEnvioErrorById,
-  createEnvioError,
-  updateEstadoEnvioError,
-  updateEnvioError,
-  deleteEnvioError
+  getAllEnvios,
+  getEnvioById,
+  createEnvio,
+  updateEnvio,
+  deleteEnvio,
+  getEnviosByIdWoo
 };
