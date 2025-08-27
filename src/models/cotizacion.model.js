@@ -79,6 +79,7 @@ const createEnvioPersonalizado = async (datos) => {
   const {
     id_usuario,
     id_woo,
+    numero_pedido,
     id_empresa,
     nombre_cliente,
     email_destino,
@@ -97,13 +98,14 @@ const createEnvioPersonalizado = async (datos) => {
 
   const [result] = await db.query(
     `INSERT INTO envios_pesonalizados (
-      id_usuario, id_woo, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
+      id_usuario, id_woo, numero_pedido, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
       productos_json, smtp_host, smtp_user, plantilla_usada,
       asunto_correo, cuerpo_html, estado_envio, mensaje_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id_usuario,
       id_woo,
+      numero_pedido,
       id_empresa,
       nombre_cliente,
       email_destino,

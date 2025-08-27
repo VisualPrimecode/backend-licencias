@@ -476,6 +476,7 @@ exports.envioProductos = async (req, res) => {
     const id = await createEnvioPersonalizado({
       id_usuario: cotizacionData.user_id,
       id_woo: cotizacionData.woocommerce_id,
+      numero_pedido: cotizacionData.numero_pedido || null,
       id_empresa: cotizacionData.empresa_id,
       nombre_cliente: cotizacionData.nombre_cliente,
       email_destino: cotizacionData.email_destino,
