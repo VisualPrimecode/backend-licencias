@@ -399,7 +399,7 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
   // 3. Devolver lista final
   return productosProcesados;
 }
-async function getPlantillaConFallback(producto_id, woo_id, empresa_id) {
+async function getPlantillaConFallback(producto_id, woo_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
   return plantilla || null; // ❌ Ya no hay plantilla por defecto
 }
