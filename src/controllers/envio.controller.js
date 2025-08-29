@@ -308,15 +308,26 @@ async function procesarProductosExtra(extraOptions, woocommerce_id, empresa_id, 
       continue;
     }
 
-    // 🔹 Obtener serial
+    // 🔹 Obtener serial según tipo de envío
     let serial = null;
+
     if (envio_tipo === 'nuevo') {
+      // Siempre pedimos uno nuevo
       serial = await Serial.obtenerSerialDisponible2(producto_id, woocommerce_id, numero_pedido);
+
     } else if (envio_tipo === 'reenvio') {
+      // Intentar recuperar serial previo
       const serialesPrevios = await Serial.getSerialesByNumeroPedido(numero_pedido);
       serial = serialesPrevios.find(s => s.producto_id === producto_id);
+
+      // ⚠️ Si no lo encontró → pedir uno nuevo igual que en "nuevo"
+      if (!serial) {
+        console.warn(`⚠️ Reenvío sin serial previo para extra "${nombreExtraProducto}", asignando uno nuevo...`);
+        serial = await Serial.obtenerSerialDisponible2(producto_id, woocommerce_id, numero_pedido);
+      }
     }
 
+    // Validación de seguridad
     if (!serial || !serial.id || !serial.codigo) {
       throw new Error(`No hay serial válido para el producto extra "${nombreExtraProducto}"`);
     }
