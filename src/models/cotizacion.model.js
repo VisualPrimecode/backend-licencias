@@ -93,15 +93,16 @@ const createEnvioPersonalizado = async (datos) => {
     asunto_correo,
     cuerpo_html,
     estado_envio = 'PENDIENTE',
-    mensaje_error = null
+    mensaje_error = null,
+    mensaje_opcional = null // 👈 Nuevo campo opcional
   } = datos;
 
   const [result] = await db.query(
     `INSERT INTO envios_pesonalizados (
       id_usuario, id_woo, numero_pedido, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
       productos_json, smtp_host, smtp_user, plantilla_usada,
-      asunto_correo, cuerpo_html, estado_envio, mensaje_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      asunto_correo, cuerpo_html, estado_envio, mensaje_error, mensaje_opcional
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id_usuario,
       id_woo,
@@ -119,12 +120,14 @@ const createEnvioPersonalizado = async (datos) => {
       asunto_correo,
       cuerpo_html,
       estado_envio,
-      mensaje_error
+      mensaje_error,
+      mensaje_opcional // 👈 Nuevo valor insertado
     ]
   );
 
   return result.insertId;
 };
+
 
 // Eliminar cotización (opcional)
 const deleteCotizacion = async (id) => {

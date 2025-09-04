@@ -720,7 +720,10 @@ exports.envioProductos = async (req, res) => {
       ...req.body,
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
       numero_cotizacion: req.body.numero_cotizacion || 'N/A',
-      store_id: req.body.woocommerce_id || 3
+      store_id: req.body.woocommerce_id || 3,
+      mensaje_opcional: req.body.mensaje_opcional || null  // 👈 Nuevo campo opcional
+
+      
     };
 
     console.log('Datos de la cotización procesados:', cotizacionData);
@@ -830,7 +833,9 @@ exports.envioProductos = async (req, res) => {
       asunto_correo,
       cuerpo_html,
       estado_envio: 'PENDIENTE',
-      mensaje_error: null
+      mensaje_error: null,
+      mensaje_opcional: cotizacionData.mensaje_opcional // 👈 Se guarda en la BD
+
     });
 
     console.log("productos con seriales:", JSON.stringify(productosConSerialesYPlantilla, null, 2));
@@ -841,7 +846,8 @@ exports.envioProductos = async (req, res) => {
       ...cotizacionData,
       productos: productosConSerialesYPlantilla,
       smtpConfig,
-      plantilla
+      plantilla,
+      
     });
 
     console.log('✅ Job de cotización encolado con seriales');

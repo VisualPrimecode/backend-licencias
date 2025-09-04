@@ -61,22 +61,34 @@ module.exports = async function enviosProductosProcessor(job) {
       `;
     }).join('');
 
-    console.log('🔎 HTML original:', plantilla.cuerpo_html);
+    // 🔑 Construcción del bloque de mensaje opcional
+   // 🔑 Construcción del bloque de mensaje opcional
+let mensajeOpcionalHtml = '';
+if (enviossProductos.mensaje_opcional && String(enviossProductos.mensaje_opcional).trim() !== '') {
+  mensajeOpcionalHtml = `
+    <div style="margin-top: 20px; padding: 15px; border-top: 1px solid #ddd; font-style: italic; color: #555;">
+      <strong>Mensaje adicional:</strong><br>
+      ${enviossProductos.mensaje_opcional}
+    </div>
+  `;
+}
 
-    // 📝 Reemplazo de placeholders
-    let htmlContent = plantilla.cuerpo_html || '';
-    htmlContent = htmlContent
-      .replace(/{{nombre_cliente}}/g, enviossProductos.nombre_cliente || 'cliente')
-      .replace(/{{numero_cotizacion}}/g, enviossProductos.numero_cotizacion || 'N/A')
-      .replace(/{{total}}/g, totalFormateado)
-      .replace(/{{subtotal}}/g, subtotalFormateado)
-      .replace(/{{iva}}/g, ivaFormateado)
-      .replace(/{{tabla_productos}}/g, productosHtml)
-      .replace(/{{seriales}}/g, serialesHtml)
-      .replace(/{{firma}}/g, plantilla.firma || '')
-      .replace(/{{logo_url}}/g, plantilla.logo_url || '')
-      .replace(/{{encabezado}}/g, plantilla.encabezado || '')
-      .replace(/{{validez_texto}}/g, plantilla.validez_texto || '');
+// 📝 Reemplazo de placeholders
+let htmlContent = plantilla.cuerpo_html || '';
+htmlContent = htmlContent
+  .replace(/{{nombre_cliente}}/g, enviossProductos.nombre_cliente || 'cliente')
+  .replace(/{{numero_cotizacion}}/g, enviossProductos.numero_cotizacion || 'N/A')
+  .replace(/{{total}}/g, totalFormateado)
+  .replace(/{{subtotal}}/g, subtotalFormateado)
+  .replace(/{{iva}}/g, ivaFormateado)
+  .replace(/{{tabla_productos}}/g, productosHtml)
+  .replace(/{{seriales}}/g, serialesHtml)
+  .replace(/{{firma}}/g, plantilla.firma || '')
+  .replace(/{{logo_url}}/g, plantilla.logo_url || '')
+  .replace(/{{encabezado}}/g, plantilla.encabezado || '')
+  .replace(/{{validez_texto}}/g, plantilla.validez_texto || '')
+  .replace(/{{mensaje_opcional}}/g, mensajeOpcionalHtml || ''); // 👈 asegura string vacío
+
 
     // 🔑 Concatenar plantillas por producto (si existen)
     const instruccionesHtml = enviossProductos.productos.map((p) => {
