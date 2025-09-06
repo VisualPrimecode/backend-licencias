@@ -472,6 +472,8 @@ exports.pedidoCompletado = async (req, res) => {
   try {
     // ✅ Validar cuerpo del webhook
       await validarPedidoWebhook(data, wooId, registrarEnvioError);
+      console.log('✅ Webhook validado correctamente');
+      console.log('data despues de validar',data);
 
 
     // ✅ Obtener empresa y usuario asociado al WooCommerce
