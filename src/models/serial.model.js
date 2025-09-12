@@ -360,6 +360,56 @@ const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
     throw err;
   }
 };
+const getSerialesPaginated = async (limit, offset) => {
+  const [rows] = await db.query(
+    'SELECT * FROM seriales ORDER BY id DESC LIMIT ? OFFSET ?',
+    [limit, offset]
+  );
+  return rows;
+};
+const searchSeriales = async (filters) => {
+  let baseQuery = 'SELECT * FROM seriales WHERE 1=1';
+  const values = [];
+
+  // 🔹 Filtro por código (LIKE)
+  if (filters.codigo) {
+    baseQuery += ' AND codigo LIKE ?';
+    values.push(`%${filters.codigo}%`);
+  }
+
+  // 🔹 Filtro por estado
+  if (filters.estado) {
+    baseQuery += ' AND estado = ?';
+    values.push(filters.estado);
+  }
+
+  // 🔹 Filtro por número de pedido
+  if (filters.numeroPedido) {
+    baseQuery += ' AND numero_pedido = ?';
+    values.push(filters.numeroPedido);
+  }
+
+  
+  // 🔹 Filtro por tienda (WooCommerce)
+  if (filters.woocommerceId) {
+    baseQuery += ' AND woocommerce_id = ?';
+    values.push(filters.woocommerceId);
+  }
+
+  // 🔹 Filtro por producto interno
+  if (filters.productoInternoId) {
+    baseQuery += ' AND producto_id = ?';
+    values.push(filters.productoInternoId);
+  }
+
+  // 🔹 Orden final
+  baseQuery += ' ORDER BY id DESC';
+
+  console.log('📝 Query generada:', baseQuery, values); // Debug
+
+  const [rows] = await db.query(baseQuery, values);
+  return rows;
+};
 
 module.exports = {
   getAllSeriales,
@@ -374,6 +424,7 @@ getSerialesByNumeroPedido,
     obtenerSerialDisponible2,
     precargarWooIdsPorEmpresa,
     getSerialesByWooData,
-
-  updateSerialEstado
+    updateSerialEstado,
+    searchSeriales,
+    getSerialesPaginated
 };

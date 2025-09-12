@@ -2,14 +2,18 @@ const express = require('express');
 const router = express.Router();
 const serialController = require('../controllers/serial.controller');
 const upload = require('../middleware/upload');
+router.get('/buscar', serialController.searchSeriales);
 
 // Ruta para carga masiva de seriales
 router.post('/carga-masiva', upload.single('archivo'), serialController.cargaMasivaSeriales);
+// Buscar seriales con filtros
+
 
 // Ruta previsualizacion de carga masiva de seriales
 router.post('/prev-carga-masiva', upload.single('archivo'), serialController.previsualizarSeriales);
 router.get('/obtener-seriales-pedido/:id', serialController.getSerialesPorPedido);
 
+router.get('/paginados', serialController.getSerialesPaginated);
 // Obtener todos los seriales
 router.get('/', serialController.getSeriales);
 
@@ -18,6 +22,7 @@ router.get('/:id', serialController.getSerialById);
 
 // Crear un nuevo serial
 router.post('/', serialController.createSerial);
+
 
 
 // Variante 2 primero (más específica)
