@@ -21,6 +21,56 @@ exports.getSeriales = async (req, res) => {
   }
 };
 
+// Obtener seriales con paginación
+exports.getSerialesPaginated = async (req, res) => {
+  try {
+    // Obtenemos page y limit desde query params, con valores por defecto
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    // Llamamos al modelo
+    const seriales = await Serial.getSerialesPaginated(limit, offset);
+
+    res.json({
+      page,
+      limit,
+      count: seriales.length,
+      data: seriales,
+    });
+  } catch (error) {
+    console.error('❌ Error al obtener seriales paginados:', error);
+    res.status(500).json({ error: 'Error al obtener seriales paginados' });
+  }
+};
+exports.searchSeriales = async (req, res) => {
+  try {
+    const { codigo, estado, numeroPedido, woocommerceId, productoInternoId } = req.query;
+
+    const filters = {
+      codigo: codigo || null,
+      estado: estado || null,
+      numeroPedido: numeroPedido || null,
+      woocommerceId: woocommerceId || null,
+      productoInternoId: productoInternoId || null,
+    };
+
+    console.log('🔍 Filtros recibidos:', filters);
+
+    const seriales = await Serial.searchSeriales(filters);
+
+    res.json({
+      count: seriales.length,
+      data: seriales,
+    });
+  } catch (error) {
+    console.error('❌ Error al buscar seriales:', error);
+    res.status(500).json({ error: 'Error al buscar seriales' });
+  }
+};
+
+
+
 // Obtener un serial por ID
 exports.getSerialById = async (req, res) => {
   try {
@@ -292,6 +342,7 @@ exports.cargaMasivaSeriales = async (req, res) => {
 };*/
 
 // ============================
+
 // 🔹 Funciones de normalización y alias
 // ============================
 
@@ -370,6 +421,7 @@ const limpiarFila = (filaOriginal, aliasMap, empresaWooMap) => {
 // 🔹 Lectores de archivos (CSV y XLSX)
 // ============================
 
+/*
 const leerCSV = async function* (filePath, aliasMap, empresaWooMap) {
   const parser = fs.createReadStream(filePath).pipe(
     csv({
@@ -589,7 +641,7 @@ exports.cargaMasivaSeriales = async (req, res) => {
     console.error('❌ Error general en carga masiva:', err);
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
-};*/
+};
 // ============================
 // 🔹 Orquestador principal
 // ============================
@@ -740,54 +792,188 @@ res.json({
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
 };
+*/
+exports.cargaMasivaSeriales = async (req, res) => {
+  try {
+    // 1. Validar archivo
+    if (!req.file) {
+      return res.status(400).json({ error: "Archivo no proporcionado" });
+    }
 
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const filePath = req.file.path;
+    const BATCH_SIZE = 500;
+
+    // 2. Función para limpiar y validar fila
+    const limpiarFila = (fila) => ({
+      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
+      codigo: fila.codigo ? String(fila.codigo).trim() : null,
+      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
+      estado: fila.estado?.trim() || "disponible",
+      fecha_ingreso: fila.fecha_ingreso || new Date(),
+      observaciones: fila.observaciones?.trim() || "",
+      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
+      woocommerce_id: fila.woocommerce_id
+        ? parseInt(fila.woocommerce_id, 10)
+        : null,
+      numero_pedido: fila.numero_pedido
+        ? String(fila.numero_pedido).trim()
+        : null,
+    });
+
+    // 3. Obtener lector según extensión
+    let lector;
+    try {
+      lector = getLector(ext, filePath, limpiarFila);
+    } catch (error) {
+      await fs.promises.unlink(filePath);
+      return res.status(400).json({ error: error.message });
+    }
+
+    // 4. Procesar archivo en lotes
+    let totalFilas = 0;
+    let totalInsertados = 0;
+    let batch = [];
+
+    for await (const fila of lector) {
+      totalFilas++;
+
+      // Validación mínima: codigo + producto_id obligatorios
+      if (fila.codigo && fila.producto_id) {
+        batch.push(fila);
+
+        if (batch.length >= BATCH_SIZE) {
+          const resInsert = await insertarLote(batch);
+          totalInsertados += resInsert.affectedRows;
+          batch = [];
+        }
+      }
+    }
+
+    // Insertar último lote pendiente
+    if (batch.length) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+    }
+
+    await fs.promises.unlink(filePath);
+
+    // 5. Respuesta final
+    res.json({
+      mensaje: "Carga completada",
+      total: totalFilas,
+      insertados: totalInsertados,
+      omitidos: totalFilas - totalInsertados,
+    });
+  } catch (err) {
+    console.error("❌ Error general en carga masiva:", err);
+    res.status(500).json({ error: "Error al procesar archivo" });
+  }
+};
+
+// ============================
+// 🔹 Lectores de archivos (CSV y XLSX)
+// ============================
+const leerCSV = async function* (filePath, limpiarFila) {
+  const parser = fs.createReadStream(filePath).pipe(
+    csv({
+      separator: ";",
+      skipEmptyLines: true,
+    })
+  );
+  for await (const row of parser) {
+    yield limpiarFila(row);
+  }
+};
+
+const leerXLSX = async function* (filePath, limpiarFila) {
+  const workbook = xlsx.readFile(filePath);
+  const hoja = workbook.Sheets[workbook.SheetNames[0]];
+  const datos = xlsx.utils.sheet_to_json(hoja);
+  for (const row of datos) {
+    yield limpiarFila(row);
+  }
+};
+
+const getLector = (ext, filePath, limpiarFila) => {
+  if (ext === ".csv") return leerCSV(filePath, limpiarFila);
+  if (ext === ".xlsx") return leerXLSX(filePath, limpiarFila);
+  throw new Error("Formato de archivo no soportado");
+};
+
+// ============================
+// 🔹 Inserción en lotes
+// ============================
+const insertarLote = async (lote) => {
+  if (!lote.length) return { affectedRows: 0 };
+
+  try {
+    const resultado = await Serial.insertarSerialesMasivos(lote);
+    console.log(`[DEPURACION] Insertados ${resultado.affectedRows} registros`);
+    return resultado;
+  } catch (error) {
+    console.error("❌ Error al insertar lote:", error);
+    return { affectedRows: 0 };
+  }
+};
 
 
 
 exports.previsualizarSeriales = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'Archivo no proporcionado' });
+      return res.status(400).json({ error: "Archivo no proporcionado" });
     }
 
     const ext = path.extname(req.file.originalname).toLowerCase();
     const filePath = req.file.path;
 
     const limpiarFila = (fila) => ({
-      codigo: fila.codigo || fila['Código'] || fila['codigo'] || '',
-      producto_id: parseInt(fila.producto_id || fila['Producto ID']) || null,
-      estado: fila.estado || 'disponible',
-      observaciones: fila.observaciones || '',
-      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id) : null
+      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
+      codigo: fila.codigo ? String(fila.codigo).trim() : null,
+      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
+      estado: fila.estado?.trim() || "disponible",
+      fecha_ingreso: fila.fecha_ingreso || new Date(),
+      observaciones: fila.observaciones?.trim() || "",
+      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
+      woocommerce_id: fila.woocommerce_id ? parseInt(fila.woocommerce_id, 10) : null,
+      numero_pedido: fila.numero_pedido ? String(fila.numero_pedido).trim() : null,
     });
 
-    let registros = [];
-
-    if (ext === '.csv') {
-      const filas = [];
-      fs.createReadStream(filePath)
-        .pipe(csv())
-        .on('data', (data) => filas.push(limpiarFila(data)))
-        .on('end', () => {
-          fs.unlinkSync(filePath); // eliminar archivo temporal
-          const validos = filas.filter(s => s.codigo && s.producto_id);
-          res.json(validos);
-        });
-    } else if (ext === '.xlsx') {
+   if (ext === ".csv") {
+  const filas = [];
+  fs.createReadStream(filePath)
+    .pipe(csv({ separator: ';' })) // 👈 importante
+    .on("data", (data) => {
+      console.log("📥 Fila cruda CSV:", data);
+      const limpia = limpiarFila(data);
+      console.log("✨ Fila normalizada:", limpia);
+      filas.push(limpia);
+    })
+    .on("end", () => {
+      fs.unlinkSync(filePath);
+      const validos = filas.filter(s => s.codigo && s.producto_id);
+      console.log("✅ Filas válidas:", validos.length);
+      res.json(validos);
+    });
+} else if (ext === ".xlsx") {
       const workbook = xlsx.readFile(filePath);
       const hoja = workbook.Sheets[workbook.SheetNames[0]];
       const datos = xlsx.utils.sheet_to_json(hoja);
+
+      console.log("📥 Datos XLSX crudos:", datos);
       registros = datos.map(limpiarFila).filter(s => s.codigo && s.producto_id);
+      console.log("✅ Filas válidas:", registros.length);
 
       fs.unlinkSync(filePath);
       res.json(registros);
     } else {
       fs.unlinkSync(filePath);
-      res.status(400).json({ error: 'Formato de archivo no soportado' });
+      res.status(400).json({ error: "Formato de archivo no soportado" });
     }
   } catch (err) {
-    console.error('❌ Error en previsualización:', err);
-    res.status(500).json({ error: 'Error al procesar archivo' });
+    console.error("❌ Error en previsualización:", err);
+    res.status(500).json({ error: "Error al procesar archivo" });
   }
 };
 
