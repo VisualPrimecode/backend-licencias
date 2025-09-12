@@ -163,7 +163,7 @@ const insertarSerialesMasivos = async (seriales) => {
 
 
     const [result] = await db.query(
-      `INSERT INTO seriales (codigo, id_serial, producto_id, estado, observaciones, usuario_id, woocommerce_id)
+      `INSERT INTO serialesAux (codigo, id_serial, producto_id, estado, observaciones, usuario_id, woocommerce_id)
        VALUES ?`,
       [valores]
     );
