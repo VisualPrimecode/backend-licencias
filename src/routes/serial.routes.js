@@ -2,8 +2,6 @@ const express = require('express');
 const router = express.Router();
 const serialController = require('../controllers/serial.controller');
 const upload = require('../middleware/upload');
-// Buscar seriales con filtros
-router.get('/buscar', serialController.searchSeriales);
 
 // Ruta para carga masiva de seriales
 router.post('/carga-masiva', upload.single('archivo'), serialController.cargaMasivaSeriales);
@@ -14,11 +12,6 @@ router.get('/obtener-seriales-pedido/:id', serialController.getSerialesPorPedido
 
 // Obtener todos los seriales
 router.get('/', serialController.getSeriales);
-
-
-// ✅ Nueva ruta: obtener seriales paginados
-router.get('/paginados', serialController.getSerialesPaginated);
-
 
 // Obtener un serial por ID
 router.get('/:id', serialController.getSerialById);

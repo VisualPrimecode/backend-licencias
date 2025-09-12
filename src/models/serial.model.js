@@ -6,13 +6,6 @@ const getAllSeriales = async () => {
   return rows;
 };
 
-const getSerialesPaginated = async (limit, offset) => {
-  const [rows] = await db.query(
-    'SELECT * FROM seriales ORDER BY id DESC LIMIT ? OFFSET ?',
-    [limit, offset]
-  );
-  return rows;
-};
 
 // Obtener un serial por ID
 const getSerialById = async (id) => {
@@ -21,50 +14,6 @@ const getSerialById = async (id) => {
 };
 const getSerialesByNumeroPedido = async (id) => {
   const [rows] = await db.query('SELECT * FROM seriales WHERE numero_pedido = ?', [id]);
-  return rows;
-};
-
-const searchSeriales = async (filters) => {
-  let baseQuery = 'SELECT * FROM seriales WHERE 1=1';
-  const values = [];
-
-  // 🔹 Filtro por código (LIKE)
-  if (filters.codigo) {
-    baseQuery += ' AND codigo LIKE ?';
-    values.push(`%${filters.codigo}%`);
-  }
-
-  // 🔹 Filtro por estado
-  if (filters.estado) {
-    baseQuery += ' AND estado = ?';
-    values.push(filters.estado);
-  }
-
-  // 🔹 Filtro por número de pedido
-  if (filters.numeroPedido) {
-    baseQuery += ' AND numero_pedido = ?';
-    values.push(filters.numeroPedido);
-  }
-
-  
-  // 🔹 Filtro por tienda (WooCommerce)
-  if (filters.woocommerceId) {
-    baseQuery += ' AND woocommerce_id = ?';
-    values.push(filters.woocommerceId);
-  }
-
-  // 🔹 Filtro por producto interno
-  if (filters.productoInternoId) {
-    baseQuery += ' AND producto_id = ?';
-    values.push(filters.productoInternoId);
-  }
-
-  // 🔹 Orden final
-  baseQuery += ' ORDER BY id DESC';
-
-  console.log('📝 Query generada:', baseQuery, values); // Debug
-
-  const [rows] = await db.query(baseQuery, values);
   return rows;
 };
 
@@ -156,7 +105,28 @@ const deleteSerial = async (id) => {
   console.log("Eliminando serial con ID:", id);
   const [result] = await db.query('DELETE FROM seriales WHERE id = ?', [id]);
   return result;
-};
+};/*
+const precargarWooIdsPorEmpresa = async () => {
+  // 1. Obtener todas las empresas
+  const [empresas] = await db.query('SELECT id, nombre FROM empresas');
+
+  // 2. Obtener todas las configuraciones WooCommerce
+  const [configs] = await db.query(
+    'SELECT empresa_id, woocommerce_id FROM woocommerce_api_config ORDER BY id ASC'
+  );
+
+  // 3. Construir el mapa en memoria
+  const empresaWooMap = {};
+  for (const empresa of empresas) {
+    // Busca la primera config asociada
+    const config = configs.find(cfg => cfg.empresa_id === empresa.id);
+    if (config) {
+      empresaWooMap[empresa.nombre] = config.woocommerce_id;
+    }
+  }
+
+  return empresaWooMap;
+};*/
 
 const precargarWooIdsPorEmpresa = async () => {
   // Trae todas las empresas con su configuración
@@ -193,7 +163,7 @@ const insertarSerialesMasivos = async (seriales) => {
 
 
     const [result] = await db.query(
-      `INSERT INTO serialesAux (codigo, id_serial, producto_id, estado, observaciones, usuario_id, woocommerce_id)
+      `INSERT INTO seriales (codigo, id_serial, producto_id, estado, observaciones, usuario_id, woocommerce_id)
        VALUES ?`,
       [valores]
     );
@@ -204,10 +174,45 @@ const insertarSerialesMasivos = async (seriales) => {
     throw err;
   }
 };
-
-// Obtener varios seriales disponibles y marcarlos como reservados
-//version antigua que diferencia el stock de seriles por tiendas
 /*
+// Obtener un serial disponible por producto y woocommerce
+const obtenerSerialDisponible = async (producto_id, woocommerce_id) => {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Seleccionar el primer serial disponible y bloquearlo
+    const [rows] = await connection.query(
+      `SELECT id, codigo
+       FROM seriales
+       WHERE producto_id = ?
+         AND woocommerce_id = ?
+         AND estado = 'disponible'
+       ORDER BY fecha_ingreso ASC
+       LIMIT 1
+       FOR UPDATE`,
+      [producto_id, woocommerce_id]
+    );
+
+    if (rows.length === 0) {
+      await connection.rollback();
+      return undefined; // No hay serial disponible
+    }
+
+    const serial = rows[0];
+        await connection.commit();
+
+    
+
+    return serial; // Retorna el serial ya reservado
+  } catch (error) {
+    await connection.rollback();
+    throw new Error('Error al obtener y asignar serial: ' + error.message);
+  } finally {
+    connection.release();
+  }
+};*/
+// Obtener varios seriales disponibles y marcarlos como reservados
 const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad, numero_pedido) => {
   const connection = await db.getConnection();
   console.log("entro a obtener seriales");
@@ -257,64 +262,9 @@ const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad,
     connection.release();
   }
 };
-*/
-
-//version nuevo que no diferencia el stock de seriles por tiendas, por el caso actual
-//donde todas la tiendas del sistema companten stock de seriales
-const obtenerSerialesDisponibles = async (producto_id, cantidad, numero_pedido) => {
-  const connection = await db.getConnection();
-  console.log("entro a obtener seriales");
-  try {
-    await connection.beginTransaction();
-
-    // 1. Seleccionar N seriales disponibles (sin discriminar por tienda)
-    const [rows] = await connection.query(
-      `SELECT id, codigo
-       FROM seriales
-       WHERE producto_id = ?
-         AND estado = 'disponible'
-       ORDER BY fecha_ingreso ASC
-       LIMIT ?
-       FOR UPDATE`,
-      [producto_id, cantidad]
-    );
-    console.log("numero de registros", rows.length);
-
-    if (rows.length < cantidad) {
-      await connection.rollback();
-      return undefined; // No hay suficientes seriales
-    }
-
-    const idsSeriales = rows.map(s => s.id);
-    console.log("IDs seleccionados:", idsSeriales);
-
-    // 2. Actualizar estado inmediatamente a 'asignado' y guardar numero_pedido
-    await connection.query(
-      `UPDATE seriales
-       SET estado = 'asignado',
-           observaciones = ?,
-           numero_pedido = ?
-       WHERE id IN (?)`,
-      [`Reservado para pedido ${numero_pedido}`, numero_pedido, idsSeriales]
-    );
-
-    await connection.commit();
-
-    return rows; // Devuelve los seriales ya reservados
-
-  } catch (error) {
-    await connection.rollback();
-    throw new Error('Error al obtener y reservar seriales: ' + error.message);
-  } finally {
-    connection.release();
-  }
-};
 
 
-//lo mismo que obtenerSerialesDisponibles, este es el metodo antiguo que discrimina el stock de seriales por tienda
-//me parece que es para el envio automatico y el otro para el envio manual u viceversa
 
-/*
 const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedido) => {
   const connection = await db.getConnection();
   try {
@@ -362,144 +312,9 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
   } finally {
     connection.release();
   }
-};*/
-//una version que no discrima el stock de seriales por tienda
-/*
-const obtenerSerialDisponible2 = async (producto_id, numero_pedido) => {
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    // 1. Seleccionar el primer serial disponible (sin discriminar por tienda) y bloquearlo
-    const [rows] = await connection.query(
-      `SELECT id, codigo
-       FROM seriales
-       WHERE producto_id = ?
-         AND estado = 'disponible'
-       ORDER BY fecha_ingreso ASC
-       LIMIT 1
-       FOR UPDATE`,
-      [producto_id]
-    );
-
-    if (rows.length === 0) {
-      await connection.rollback();
-      return undefined; // No hay serial disponible
-    }
-
-    const serial = rows[0];
-
-    // 2. Marcar como asignado y guardar número de pedido
-    await connection.query(
-      `UPDATE seriales
-       SET estado = 'asignado',
-           numero_pedido = ?
-       WHERE id = ?`,
-      [numero_pedido, serial.id]
-    );
-
-    // 3. Confirmar la transacción
-    await connection.commit();
-
-    // 4. Retornar el serial ya reservado
-    return {
-      ...serial
-    };
-  } catch (error) {
-    await connection.rollback();
-    throw new Error('Error al obtener y asignar serial: ' + error.message);
-  } finally {
-    connection.release();
-  }
 };
-*/
-//nueva version no discrimina el stock de seriales por tienda y ademas trae el concepto de producto hermano
-//que son productos que comparten el mismo tiopo de seriales
 
 // models/serialesModel.js
-const mapaEquivalencias = {
-  // Claves: producto_id principal
-  // Valores: array de producto_id equivalentes
-  //caso Windows 11 y 10 pro
-  336:[371],
-371:[336],
-//caso Windows 11 y 10 home
-
-337:[338],
-338:[337],
-//caso office, Word,exel 2021
-331:[400,391],
-400:[331,391],
-391:[400,331],
-//caso mcafe antivirus pls, internet security y total protection
-339:[340,341],
-340:[339,341],
-341:[340,339]
-};
-
-const obtenerSerialDisponible2 = async (producto_id, numero_pedido) => {
-  const connection = await db.getConnection();
-  try {
-    await connection.beginTransaction();
-
-    // 1. Función auxiliar para intentar obtener un serial
-    const intentarObtener = async (pid) => {
-      const [rows] = await connection.query(
-        `SELECT id, codigo
-         FROM seriales
-         WHERE producto_id = ?
-           AND estado = 'disponible'
-         ORDER BY fecha_ingreso ASC
-         LIMIT 1
-         FOR UPDATE`,
-        [pid]
-      );
-      return rows;
-    };
-
-    // 2. Intentar con el producto solicitado
-    let rows = await intentarObtener(producto_id);
-
-    // 3. Si no hay stock, revisar equivalencias
-    if (rows.length === 0 && mapaEquivalencias[producto_id]) {
-      for (const equivalente of mapaEquivalencias[producto_id]) {
-        rows = await intentarObtener(equivalente);
-        if (rows.length > 0) {
-          producto_id = equivalente; // actualizar al producto que efectivamente se usó
-          break;
-        }
-      }
-    }
-
-    if (rows.length === 0) {
-      await connection.rollback();
-      return undefined; // No hay serial disponible ni en equivalentes
-    }
-
-    const serial = rows[0];
-
-    // 4. Marcar como asignado y guardar número de pedido
-    await connection.query(
-      `UPDATE seriales
-       SET estado = 'asignado',
-           numero_pedido = ?
-       WHERE id = ?`,
-      [numero_pedido, serial.id]
-    );
-
-    await connection.commit();
-
-    return {
-      ...serial,
-      producto_id // retornamos el producto_id real de donde salió el serial
-    };
-  } catch (error) {
-    await connection.rollback();
-    throw new Error('Error al obtener y asignar serial: ' + error.message);
-  } finally {
-    connection.release();
-  }
-};
 
 const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
   console.log("Obteniendo seriales por datos de WooCommerce:", woocommerceId, wooProductId, cantidad);
@@ -528,6 +343,17 @@ const getSerialesByWooData = async (woocommerceId, wooProductId, cantidad) => {
    LIMIT ?`,
   [productoInternoId, cantidad]
 );
+
+    /*
+    const [seriales] = await db.query(
+      `SELECT id, codigo 
+       FROM seriales 
+       WHERE producto_id = ? AND estado = 'disponible' 
+       ORDER BY fecha_ingreso ASC 
+       LIMIT ?`,
+      [productoInternoId, cantidad]
+    );
+*/
     return { error: false, seriales };
   } catch (err) {
     console.error("Error en getSerialesByWooData:", err);
@@ -549,7 +375,5 @@ getSerialesByNumeroPedido,
     precargarWooIdsPorEmpresa,
     getSerialesByWooData,
 
-  updateSerialEstado,
-  getSerialesPaginated,
-  searchSeriales
+  updateSerialEstado
 };

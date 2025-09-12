@@ -6,11 +6,6 @@ const infoController = require('../controllers/informes.controller');
 // Obtener un informe por ID Woo para licencias originales
 router.get('/:id', infoController.getInforme);
 
-router.get('/seriales/estimacion-stock-semanal', infoController.getEstadoStockProductos);
-
-router.get('/seriales/productos-vendidos-por-rango', infoController.getProductosVendidosPorRango);
-
-
 router.get('/informe-por-mes-originales/:id', infoController.getInformePorMes);
 
 router.get('/informe-por-rango-originales/:id', infoController.getInformePorRango);

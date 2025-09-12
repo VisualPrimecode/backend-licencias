@@ -468,101 +468,6 @@ const getInformePedidosTotalesJejePorRango = async (configId, fechaInicio, fecha
   }
 };
 
-const getProductosVendidosPorRango = async (fechaInicio, fechaFin) => {
-  console.log("📊 Entrando en getProductosVendidosPorRango");
-  console.log(`⏳ Fechas: ${fechaInicio} → ${fechaFin}`);
-
-  try {
-    const query = `
-      SELECT 
-          DATE_FORMAT(e.fecha_envio, '%Y-%m') AS mes,
-          s.producto_id,
-          p.nombre AS producto,
-          COUNT(s.id) AS total_vendidos
-      FROM envios e
-      JOIN seriales s 
-          ON e.numero_pedido = s.numero_pedido
-      JOIN productos p 
-          ON s.producto_id = p.id
-      WHERE e.estado = 'enviado'
-        AND e.fecha_envio BETWEEN ? AND ?
-      GROUP BY DATE_FORMAT(e.fecha_envio, '%Y-%m'), s.producto_id
-      ORDER BY mes, total_vendidos DESC;
-    `;
-
-    const [rows] = await db.query(query, [fechaInicio, fechaFin]);
-
-    return rows;
-
-  } catch (error) {
-    console.error('❌ Error en getProductosVendidosPorRango:', error.message);
-    throw new Error('Error al obtener productos vendidos: ' + error.message);
-  }
-};
-
-const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
-  console.log("📊 Entrando en getEstadoStockProductos");
-  console.log(`⏳ Fechas para promedio semanal: ${fechaInicio} → ${fechaFin}`);
-
-  try {
-    const query = `
-      WITH promedio_semanal AS (
-          SELECT 
-              sub.producto_id,
-              ROUND(AVG(sub.total_vendidos), 2) AS promedio_semanal
-          FROM (
-              SELECT 
-                  YEARWEEK(e.fecha_envio, 1) AS anio_semana,
-                  s.producto_id,
-                  COUNT(s.id) AS total_vendidos
-              FROM envios e
-              JOIN seriales s 
-                  ON e.numero_pedido = s.numero_pedido
-              WHERE e.estado = 'enviado'
-                AND e.fecha_envio BETWEEN ? AND ?
-              GROUP BY YEARWEEK(e.fecha_envio, 1), s.producto_id
-          ) AS sub
-          GROUP BY sub.producto_id
-      ),
-      stock_actual AS (
-          SELECT 
-              s.producto_id,
-              COUNT(s.id) AS disponibles
-          FROM seriales s
-          WHERE s.estado = 'disponible'
-          GROUP BY s.producto_id
-      )
-      SELECT 
-          p.id AS producto_id,
-          p.nombre AS producto,
-          COALESCE(sa.disponibles, 0) AS stock_disponible,
-          COALESCE(ps.promedio_semanal, 0) AS promedio_semanal,
-          (COALESCE(sa.disponibles, 0) - COALESCE(ps.promedio_semanal, 0)) AS diferencia,
-          CASE 
-              WHEN COALESCE(sa.disponibles, 0) >= COALESCE(ps.promedio_semanal, 0) 
-                  THEN 'Stock suficiente'
-              ELSE 'Necesita reponer'
-          END AS estado_stock
-      FROM productos p
-      LEFT JOIN stock_actual sa ON p.id = sa.producto_id
-      LEFT JOIN promedio_semanal ps ON p.id = ps.producto_id
-      ORDER BY 
-          CASE 
-              WHEN COALESCE(sa.disponibles, 0) < COALESCE(ps.promedio_semanal, 0) THEN 1
-              ELSE 2
-          END,
-          diferencia ASC;
-    `;
-
-    const [rows] = await db.query(query, [fechaInicio, fechaFin]);
-
-    return rows;
-
-  } catch (error) {
-    console.error('❌ Error en getEstadoStockProductos:', error.message);
-    throw new Error('Error al obtener estado de stock: ' + error.message);
-  }
-};
 
 module.exports = { 
   getInformeLicenciasOriginales,
@@ -570,7 +475,5 @@ module.exports = {
   getInformeLicenciasPorRango,
   getInformePorRango, 
   getInformePedidosDetalladoJejePorRango,
-  getInformePedidosTotalesJejePorRango ,
-  getProductosVendidosPorRango,
-  getEstadoStockProductos
+  getInformePedidosTotalesJejePorRango 
 };
