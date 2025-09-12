@@ -114,3 +114,54 @@ exports.getInformePedidosDetalladoJeje = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener datos del informe detallado JEJE' });
   }
 };
+exports.getEstadoStockProductos = async (req, res) => {
+  console.log("📦 Obteniendo estado de stock por promedio semanal");
+
+  try {
+    const { fechaInicio, fechaFin } = req.query;
+
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({ 
+        error: 'Los parámetros "fechaInicio" y "fechaFin" son obligatorios.' 
+      });
+    }
+
+    const datos = await Informe.getEstadoStockProductos(fechaInicio, fechaFin);
+
+    res.json({
+      rango: { fechaInicio, fechaFin },
+      total_productos: datos.length,
+      resultados: datos
+    });
+
+  } catch (error) {
+    console.error('❌ Error en getEstadoStockProductos:', error.message);
+    res.status(500).json({ error: 'Error al obtener estado del stock' });
+  }
+};
+
+exports.getProductosVendidosPorRango = async (req, res) => {
+  console.log("📦 Obteniendo informe de productos vendidos por rango");
+
+  try {
+    const { fechaInicio, fechaFin } = req.query;
+
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({ 
+        error: 'Los parámetros "fechaInicio" y "fechaFin" son obligatorios.' 
+      });
+    }
+
+    const datos = await Informe.getProductosVendidosPorRango(fechaInicio, fechaFin);
+
+    res.json({
+      rango: { fechaInicio, fechaFin },
+      total_productos: datos.length,
+      resultados: datos
+    });
+
+  } catch (error) {
+    console.error('❌ Error en getProductosVendidosPorRango:', error.message);
+    res.status(500).json({ error: 'Error al obtener datos del informe' });
+  }
+};
