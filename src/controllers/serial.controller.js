@@ -739,7 +739,7 @@ res.json({
     res.status(500).json({ error: 'Error al procesar archivo' });
   }
 };*/
-
+/*
 exports.cargaMasivaSeriales = async (req, res) => {
   try {
     // 1. Validar archivo
@@ -816,7 +816,110 @@ exports.cargaMasivaSeriales = async (req, res) => {
     console.error("❌ Error general en carga masiva:", err);
     res.status(500).json({ error: "Error al procesar archivo" });
   }
+};*/
+
+const { Readable } = require("stream");
+
+// 👉 asegúrate de tener estas funciones en tu proyecto:
+// - insertarLote(batch) → inserta en tu BD
+// - getLector() ya no se necesita porque lo hacemos aquí con buffer
+
+exports.cargaMasivaSeriales = async (req, res) => {
+  try {
+    // 1. Validar archivo
+    if (!req.file) {
+      return res.status(400).json({ error: "Archivo no proporcionado" });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const BATCH_SIZE = 500;
+
+    // 2. Función para limpiar y validar fila
+    const limpiarFila = (fila) => ({
+      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
+      codigo: fila.codigo ? String(fila.codigo).trim() : null,
+      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
+      estado: fila.estado?.trim() || "disponible",
+      fecha_ingreso: fila.fecha_ingreso || new Date(),
+      observaciones: fila.observaciones?.trim() || "",
+      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
+      woocommerce_id: fila.woocommerce_id ? parseInt(fila.woocommerce_id, 10) : null,
+      numero_pedido: fila.numero_pedido ? String(fila.numero_pedido).trim() : null,
+    });
+
+    // 3. Variables de control
+    let totalFilas = 0;
+    let totalInsertados = 0;
+    let batch = [];
+
+    // --- 📌 Procesar CSV ---
+    if (ext === ".csv") {
+      const stream = Readable.from(req.file.buffer.toString());
+
+      await new Promise((resolve, reject) => {
+        stream
+          .pipe(csv({ separator: ";" }))
+          .on("data", async (data) => {
+            totalFilas++;
+            const fila = limpiarFila(data);
+
+            if (fila.codigo && fila.producto_id) {
+              batch.push(fila);
+
+              if (batch.length >= BATCH_SIZE) {
+                const resInsert = await insertarLote(batch);
+                totalInsertados += resInsert.affectedRows;
+                batch = [];
+              }
+            }
+          })
+          .on("end", resolve)
+          .on("error", reject);
+      });
+
+    // --- 📌 Procesar XLSX ---
+    } else if (ext === ".xlsx") {
+      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const datos = xlsx.utils.sheet_to_json(hoja);
+
+      for (const data of datos) {
+        totalFilas++;
+        const fila = limpiarFila(data);
+
+        if (fila.codigo && fila.producto_id) {
+          batch.push(fila);
+
+          if (batch.length >= BATCH_SIZE) {
+            const resInsert = await insertarLote(batch);
+            totalInsertados += resInsert.affectedRows;
+            batch = [];
+          }
+        }
+      }
+    } else {
+      return res.status(400).json({ error: "Formato de archivo no soportado" });
+    }
+
+    // 4. Insertar último lote pendiente
+    if (batch.length) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+    }
+
+    // 5. Respuesta final
+    res.json({
+      mensaje: "Carga completada",
+      total: totalFilas,
+      insertados: totalInsertados,
+      omitidos: totalFilas - totalInsertados,
+    });
+  } catch (err) {
+    console.error("❌ Error general en carga masiva:", err);
+    res.status(500).json({ error: "Error al procesar archivo" });
+  }
 };
+
 
 // ============================
 // 🔹 Lectores de archivos (CSV y XLSX)
@@ -866,7 +969,7 @@ const insertarLote = async (lote) => {
 
 
 
-
+/*
 exports.previsualizarSeriales = async (req, res) => {
   try {
     if (!req.file) {
@@ -926,6 +1029,74 @@ exports.previsualizarSeriales = async (req, res) => {
   }
 };
 
+*/
+
+exports.previsualizarSeriales = async (req, res) => {
+  try {
+    // 1. Validar archivo
+    if (!req.file) {
+      return res.status(400).json({ error: "Archivo no proporcionado" });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+
+    // 2. Normalización de cada fila
+    const limpiarFila = (fila) => ({
+      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
+      codigo: fila.codigo ? String(fila.codigo).trim() : null,
+      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
+      estado: fila.estado?.trim() || "disponible",
+      fecha_ingreso: fila.fecha_ingreso || new Date(),
+      observaciones: fila.observaciones?.trim() || "",
+      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
+      woocommerce_id: fila.woocommerce_id ? parseInt(fila.woocommerce_id, 10) : null,
+      numero_pedido: fila.numero_pedido ? String(fila.numero_pedido).trim() : null,
+    });
+
+    // 3. Procesar CSV desde buffer
+    if (ext === ".csv") {
+      const filas = [];
+      const stream = Readable.from(req.file.buffer.toString()); // convertir buffer a stream
+
+      stream
+        .pipe(csv({ separator: ";" })) // separador ; como antes
+        .on("data", (data) => {
+          console.log("📥 Fila cruda CSV:", data);
+          const limpia = limpiarFila(data);
+          console.log("✨ Fila normalizada:", limpia);
+          filas.push(limpia);
+        })
+        .on("end", () => {
+          const validos = filas.filter((s) => s.codigo && s.producto_id);
+          console.log("✅ Filas válidas:", validos.length);
+          res.json(validos);
+        })
+        .on("error", (err) => {
+          console.error("❌ Error leyendo CSV:", err);
+          res.status(500).json({ error: "Error procesando CSV" });
+        });
+
+    // 4. Procesar XLSX desde buffer
+    } else if (ext === ".xlsx") {
+      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const datos = xlsx.utils.sheet_to_json(hoja);
+
+      console.log("📥 Datos XLSX crudos:", datos);
+      const registros = datos.map(limpiarFila).filter((s) => s.codigo && s.producto_id);
+      console.log("✅ Filas válidas:", registros.length);
+
+      res.json(registros);
+
+    // 5. Extensión no soportada
+    } else {
+      return res.status(400).json({ error: "Formato de archivo no soportado" });
+    }
+  } catch (err) {
+    console.error("❌ Error en previsualización:", err);
+    res.status(500).json({ error: "Error al procesar archivo" });
+  }
+};
 
 /*
 exports.obtenerSerialDisponible = async (req, res) => {
