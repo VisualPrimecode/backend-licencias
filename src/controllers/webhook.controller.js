@@ -607,6 +607,8 @@ if (!empresaUsuario) {
     const usuario_id = empresaUsuario.usuario_id;
 
     // ✅ Datos del cliente
+    const currency = data.currency || null;
+    console.log("moneda del pedido",currency);
     const billing = data.billing || {};
     const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
     const email_cliente = billing.email || null; // quitar hardcode
