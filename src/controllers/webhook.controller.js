@@ -628,9 +628,11 @@ if (!empresaUsuario) {
   data.line_items,
   wooId,
   empresa_id,
+  
   usuario_id,
   numero_pedido,
-  registrarEnvioError
+  registrarEnvioError,
+  currency
 );
 
     // ✅ Construcción del objeto de envío
