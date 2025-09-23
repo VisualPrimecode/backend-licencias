@@ -561,8 +561,10 @@ async function validarPreciosProductos(lineItems, currency, registrarEnvioError,
   for (const item of lineItems) {
     const nombre = item.name || `Producto ${item.product_id}`;
     const precioUnitario = item.price || (parseFloat(item.total) / (item.quantity || 1));
+    console.log(`🔍 Validando precio de ${nombre}: ${precioUnitario} MXN`);
 
     if (precioUnitario < 10) {
+      console.warn(`❌ Precio inválido detectado para ${nombre}: ${precioUnitario} MXN`);
       // Registrar error en BD/logs
       await registrarEnvioError({
         empresa_id,
