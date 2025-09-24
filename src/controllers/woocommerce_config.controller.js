@@ -171,3 +171,40 @@ exports.deleteConfig = async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar configuración' });
   }
 };
+exports.getVentasTotalesMXN = async (req, res) => {
+  console.log('📊 Generando informe de ventas en MXN...');
+  try {
+    const { id } = req.params; // 🆔 ID de la config de WooCommerce
+    const { startDate, endDate } = req.query; // 📅 rango de fechas desde query params
+
+    const informe = await WooConfig.getVentasTotalesMXN(id, { startDate, endDate });
+
+    if (!informe || informe.total_orders === 0) {
+      return res.status(404).json({ message: 'No se encontraron ventas en MXN para el periodo indicado' });
+    }
+
+    res.json(informe);
+  } catch (error) {
+    console.error('Error al generar informe de ventas en MXN:', error);
+    res.status(500).json({ error: 'Error al generar informe de ventas en MXN' });
+  }
+};
+// 📈 Informe de tendencia de ventas en MXN
+exports.getTendenciaProductosMXN = async (req, res) => {
+  console.log('📊 Generando informe de TENDENCIA de productos en MXN...');
+  try {
+    const { id } = req.params; // 🆔 ID de la config de WooCommerce
+    const { startDate, endDate } = req.query; // 📅 rango de fechas desde query params
+
+    const informe = await WooConfig.getTendenciaProductosMXN(id, { startDate, endDate });
+
+    if (!informe || informe.productos.length === 0) {
+      return res.status(404).json({ message: 'No se encontraron ventas en MXN para el periodo indicado' });
+    }
+
+    res.json(informe);
+  } catch (error) {
+    console.error('Error al generar informe de tendencia de productos en MXN:', error);
+    res.status(500).json({ error: 'Error al generar informe de tendencia de productos en MXN' });
+  }
+};

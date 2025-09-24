@@ -334,7 +334,7 @@ if (fullNameMatch || emailMatch) {
   }
 };
 
-
+/*
 
 //pedidos para envio manual de pedidos
 const getPedidos = async (id, queryParams = {}) => {
@@ -388,6 +388,272 @@ const getPedidos = async (id, queryParams = {}) => {
     return filteredOrders;
   } catch (error) {
     console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};*/
+
+const getPedidos = async (id, queryParams = {}) => {
+  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    const response = await api.get("orders", queryParams);
+
+    // Filtrar pedidos con estado "completed" o "processing"
+    const completedOrders = response.data.filter(order =>
+      order.status === "completed" || order.status === "processing"
+    );
+    console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
+
+    const filteredOrders = completedOrders.map(order => ({
+      id: order.id,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+      customer_email: order.billing.email,
+      status: order.status,
+      total: parseFloat(order.total || 0),
+      currency: order.currency, // 👈 NUEVO CAMPO
+      payment_method: order.payment_method_title || order.payment_method,
+      products: order.line_items.map(item => {
+        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: opt.price || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      })
+    }));
+
+    return filteredOrders;
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+/*
+// 📊 Obtener informe de ventas totales en MXN en un rango de fechas
+const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Calculando ventas totales en MXN...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 🔄 Usamos el nuevo método con paginación completa
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+
+    console.log(`📦 Pedidos obtenidos del rango (${startDate} - ${endDate}): ${pedidos.length}`);
+
+    // Filtrar solo los pedidos en MXN
+    const mxnOrders = pedidos.filter(order => order.currency === "MXN");
+
+    // Calcular monto total y cantidades
+    const totalAmount = mxnOrders.reduce((acc, order) => acc + order.total, 0);
+
+    return {
+      total_orders: mxnOrders.length,
+      total_amount_mxn: totalAmount,
+      orders: mxnOrders.map(order => ({
+        id: order.id,
+        total: order.total,
+        currency: order.currency,
+        date_created: order.date_created,
+        customer_name: order.customer_name,
+        customer_email: order.customer_email,
+        payment_method: order.payment_method
+      }))
+    };
+
+  } catch (error) {
+    console.error("💥 Error en getVentasTotalesMXN:", error);
+    throw error;
+  }
+};*/
+// 📊 Obtener informe de ventas totales en MXN en un rango de fechas
+// 📊 Informe de ventas en MXN con detalle de productos y promedios diarios
+const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Calculando informe extendido de ventas en MXN...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 🔄 Obtener pedidos paginados en el rango
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Pedidos obtenidos del rango: ${pedidos.length}`);
+
+    // Filtrar pedidos en MXN
+    const mxnOrders = pedidos.filter(order => order.currency === "MXN");
+
+    // Calcular rango en días (mínimo 1 día para evitar división por cero)
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date();
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
+
+    // Calcular monto total
+    const totalAmount = mxnOrders.reduce((acc, order) => acc + order.total, 0);
+
+    // 📦 Agrupación por producto
+    const productStats = {};
+
+    mxnOrders.forEach(order => {
+      order.products.forEach(item => {
+        if (!productStats[item.product_id]) {
+          productStats[item.product_id] = {
+            product_id: item.product_id,
+            name: item.name,
+            total_quantity: 0,
+            total_sales: 0
+          };
+        }
+        productStats[item.product_id].total_quantity += item.quantity;
+        productStats[item.product_id].total_sales += item.quantity * (order.total / order.products.length);
+      });
+    });
+
+    // Transformar en array y calcular promedio diario
+    const productsReport = Object.values(productStats).map(prod => ({
+      product_id: prod.product_id,
+      name: prod.name,
+      total_quantity: prod.total_quantity,
+      total_sales: prod.total_sales,
+      avg_daily_quantity: (prod.total_quantity / diffDays).toFixed(2),
+      avg_daily_sales: (prod.total_sales / diffDays).toFixed(2)
+    }));
+
+    // Ordenar por cantidad total (más vendidos primero)
+    productsReport.sort((a, b) => b.total_quantity - a.total_quantity);
+
+    return {
+      total_orders_revisados: pedidos.length,
+      total_orders_mxn: mxnOrders.length,
+      total_amount_mxn: totalAmount,
+      rango_dias: diffDays,
+      orders: mxnOrders.map(order => ({
+        id: order.id,
+        total: order.total,
+        currency: order.currency,
+        date_created: order.date_created,
+        customer_name: order.customer_name,
+        customer_email: order.customer_email,
+        payment_method: order.payment_method
+      })),
+      products_summary: productsReport
+    };
+
+  } catch (error) {
+    console.error("💥 Error en getVentasTotalesMXN:", error);
+    throw error;
+  }
+};
+
+
+
+// 🔎 Obtener TODOS los pedidos dentro de un rango de fechas (con paginación)
+const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
+  console.log("⏳ Iniciando búsqueda de pedidos por rango de fechas...");
+  console.log("📅 Filtros recibidos:", { startDate, endDate });
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(idConfig);
+
+    const now = new Date();
+    const defaultStart = new Date();
+    defaultStart.setFullYear(now.getFullYear() - 1);
+
+    const start = startDate ? new Date(startDate) : defaultStart;
+    const end = endDate ? new Date(endDate) : now;
+
+    if (endDate) {
+      end.setHours(23, 59, 59, 999);
+    }
+
+    const startISO = start.toISOString();
+    const endISO = end.toISOString();
+
+    console.log("📅 Rango de fechas:", { startISO, endISO });
+
+    const perPage = 100;
+    const maxPages = 100; // 👉 máximo 10,000 pedidos (100 x 100)
+    const batchSize = 5;
+
+    let allOrders = [];
+
+    for (let i = 0; i < maxPages; i += batchSize) {
+      const pageBatch = Array.from({ length: batchSize }, (_, j) => i + j + 1);
+      console.log(`🚀 Solicitando páginas:`, pageBatch);
+
+      const promises = pageBatch.map(page =>
+        api.get("orders", {
+          per_page: perPage,
+          page,
+          after: startISO,
+          before: endISO,
+        }).then(res => res.data).catch(err => {
+          console.warn(`⚠️ Error en página ${page}:`, err.message || err);
+          return [];
+        })
+      );
+
+      const results = await Promise.all(promises);
+      const orders = results.flat();
+
+      // Filtrar pedidos con estado válido
+      const validOrders = orders.filter(order =>
+        order.status === "completed" || order.status === "processing"
+      );
+
+      // Mapear al formato que ya usamos en getPedidos
+      const formattedOrders = validOrders.map(order => ({
+        id: order.id,
+        customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+        customer_email: order.billing.email,
+        status: order.status,
+        total: parseFloat(order.total || 0),
+        currency: order.currency,
+        payment_method: order.payment_method_title || order.payment_method,
+        products: order.line_items.map(item => {
+          const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+
+          const extra_options = Array.isArray(extraOptionData?.value)
+            ? extraOptionData.value.map(opt => ({
+                name: opt.name,
+                value: opt.value,
+                price: opt.price || 0
+              }))
+            : [];
+
+          return {
+            product_id: item.product_id,
+            name: item.name,
+            quantity: item.quantity,
+            variation_id: item.variation_id || null,
+            extra_options
+          };
+        })
+      }));
+
+      allOrders.push(...formattedOrders);
+
+      // 🚪 Corte anticipado si ya no hay más pedidos
+      if (orders.length < perPage * batchSize) {
+        console.log("🛑 Fin anticipado: no hay más pedidos.");
+        break;
+      }
+    }
+
+    console.log(`✅ Pedidos obtenidos en total: ${allOrders.length}`);
+    return allOrders;
+
+  } catch (error) {
+    console.error("💥 Error obteniendo pedidos por rango:", error.response?.data || error);
     throw error;
   }
 };
@@ -501,6 +767,111 @@ const getConfigsByEmpresaId = async (empresaId) => {
   );
   return rows;
 };
+// 📈 Informe de tendencia de ventas por producto en MXN
+// 📊 Analizar tendencia de ventas de productos en MXN
+const getTendenciaProductosMXN = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Calculando tendencia de productos en MXN...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 🔹 Definir rango actual
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const rangoDias = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    // 🔹 Definir rango anterior equivalente
+    const anteriorEnd = new Date(start);
+    anteriorEnd.setDate(anteriorEnd.getDate() - 1);
+    const anteriorStart = new Date(anteriorEnd);
+    anteriorStart.setDate(anteriorEnd.getDate() - (rangoDias - 1));
+
+    console.log("📅 Rango actual:", { start, end });
+    console.log("📅 Rango anterior:", { anteriorStart, anteriorEnd });
+
+    // 🔄 Obtener pedidos de ambos rangos
+    const pedidosActuales = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    const pedidosAnteriores = await getAllPedidosByDateRange(idConfig, {
+      startDate: anteriorStart.toISOString(),
+      endDate: anteriorEnd.toISOString()
+    });
+
+    console.log(`📦 Pedidos actuales obtenidos: ${pedidosActuales.length}`);
+    console.log(`📦 Pedidos anteriores obtenidos: ${pedidosAnteriores.length}`);
+
+    // 🔹 Filtrar pedidos en MXN
+    const pedidosMXNActuales = pedidosActuales.filter(o => o.currency === "MXN");
+    const pedidosMXNAnteriores = pedidosAnteriores.filter(o => o.currency === "MXN");
+
+    // 🔹 Agrupar por producto
+    const agruparProductos = (pedidos) => {
+      const map = {};
+      pedidos.forEach(order => {
+        order.products.forEach(item => {
+          if (!map[item.product_id]) {
+            map[item.product_id] = {
+              product_id: item.product_id,
+              name: item.name,
+              total_quantity: 0,
+              total_sales: 0
+            };
+          }
+          map[item.product_id].total_quantity += item.quantity;
+          map[item.product_id].total_sales += order.total * (item.quantity / order.products.reduce((sum, p) => sum + p.quantity, 0));
+        });
+      });
+      return map;
+    };
+
+    const productosActuales = agruparProductos(pedidosMXNActuales);
+    const productosAnteriores = agruparProductos(pedidosMXNAnteriores);
+
+    // 🔹 Comparar productos
+    const productosInforme = Object.values(productosActuales).map(prod => {
+      const anterior = productosAnteriores[prod.product_id] || { total_quantity: 0, total_sales: 0 };
+
+      const variacionCantidad = prod.total_quantity - anterior.total_quantity;
+      let variacionPct = 0;
+      if (anterior.total_quantity === 0 && prod.total_quantity > 0) {
+        variacionPct = 100; // nuevo producto
+      } else if (anterior.total_quantity > 0) {
+        variacionPct = (variacionCantidad / anterior.total_quantity) * 100;
+      }
+
+      return {
+        product_id: prod.product_id,
+        name: prod.name,
+        periodo_actual: {
+          total_quantity: prod.total_quantity,
+          avg_daily_quantity: (prod.total_quantity / rangoDias).toFixed(2),
+          total_sales: prod.total_sales,
+          avg_daily_sales: (prod.total_sales / rangoDias).toFixed(2)
+        },
+        periodo_anterior: {
+          total_quantity: anterior.total_quantity,
+          avg_daily_quantity: (anterior.total_quantity / rangoDias).toFixed(2),
+          total_sales: anterior.total_sales,
+          avg_daily_sales: (anterior.total_sales / rangoDias).toFixed(2)
+        },
+        variacion_cantidad: variacionCantidad,
+        variacion_pct: parseFloat(variacionPct.toFixed(2))
+      };
+    });
+
+    // 🔹 Ordenar por más crecimiento en cantidad
+    productosInforme.sort((a, b) => b.variacion_cantidad - a.variacion_cantidad);
+
+    return {
+      rango_dias: rangoDias,
+      total_orders_actuales: pedidosMXNActuales.length,
+      total_orders_anteriores: pedidosMXNAnteriores.length,
+      productos: productosInforme
+    };
+
+  } catch (error) {
+    console.error("💥 Error en getTendenciaProductosMXN:", error);
+    throw error;
+  }
+};
 
 module.exports = {
   getAllConfigs,
@@ -515,5 +886,7 @@ module.exports = {
   getPedidosInforme,
   searchPedidos,
   getAllProducts,
-  syncProductsFromStore
+  syncProductsFromStore,
+  getVentasTotalesMXN,
+  getTendenciaProductosMXN
 };

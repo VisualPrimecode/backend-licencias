@@ -30,7 +30,14 @@ router.delete('/:id', wooConfigController.deleteConfig);
 router.get('/woo/:id/products', wooConfigController.getAllConfigsWooProducts);
 
 // Obtener pedidos de WooCommerce por ID de configuración
-router.get('/woo/:id/orders', wooConfigController.getAllConfigsWooOrders);
+router.get('/woo/:id/orders', wooConfigController.getAllConfigsWooOrders);// 🚀 Nueva ruta para informe de ventas en MXN
+router.get('/woo/:id/ventas-mxn', wooConfigController.getVentasTotalesMXN);
+
+router.get('/woo/:id/tendencia-mxn', wooConfigController.getTendenciaProductosMXN);
+
+
+
+
 
 // 🚀 Nueva ruta para sincronizar productos
 router.post('/woo/:storeId/sync-products', wooConfigController.syncProducts);
