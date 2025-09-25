@@ -478,82 +478,6 @@ const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
   }
 };*/
 // 📊 Obtener informe de ventas totales en MXN en un rango de fechas
-// 📊 Informe de ventas en MXN con detalle de productos y promedios diarios
-const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
-  console.log("📊 Calculando informe extendido de ventas en MXN...");
-  console.log("📅 Parámetros recibidos:", { startDate, endDate });
-
-  try {
-    // 🔄 Obtener pedidos paginados en el rango
-    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
-    console.log(`📦 Pedidos obtenidos del rango: ${pedidos.length}`);
-
-    // Filtrar pedidos en MXN
-    const mxnOrders = pedidos.filter(order => order.currency === "MXN");
-
-    // Calcular rango en días (mínimo 1 día para evitar división por cero)
-    const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : new Date();
-    const diffTime = end.getTime() - start.getTime();
-    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
-
-    // Calcular monto total
-    const totalAmount = mxnOrders.reduce((acc, order) => acc + order.total, 0);
-
-    // 📦 Agrupación por producto
-    const productStats = {};
-
-    mxnOrders.forEach(order => {
-      order.products.forEach(item => {
-        if (!productStats[item.product_id]) {
-          productStats[item.product_id] = {
-            product_id: item.product_id,
-            name: item.name,
-            total_quantity: 0,
-            total_sales: 0
-          };
-        }
-        productStats[item.product_id].total_quantity += item.quantity;
-        productStats[item.product_id].total_sales += item.quantity * (order.total / order.products.length);
-      });
-    });
-
-    // Transformar en array y calcular promedio diario
-    const productsReport = Object.values(productStats).map(prod => ({
-      product_id: prod.product_id,
-      name: prod.name,
-      total_quantity: prod.total_quantity,
-      total_sales: prod.total_sales,
-      avg_daily_quantity: (prod.total_quantity / diffDays).toFixed(2),
-      avg_daily_sales: (prod.total_sales / diffDays).toFixed(2)
-    }));
-
-    // Ordenar por cantidad total (más vendidos primero)
-    productsReport.sort((a, b) => b.total_quantity - a.total_quantity);
-
-    return {
-      total_orders_revisados: pedidos.length,
-      total_orders_mxn: mxnOrders.length,
-      total_amount_mxn: totalAmount,
-      rango_dias: diffDays,
-      orders: mxnOrders.map(order => ({
-        id: order.id,
-        total: order.total,
-        currency: order.currency,
-        date_created: order.date_created,
-        customer_name: order.customer_name,
-        customer_email: order.customer_email,
-        payment_method: order.payment_method
-      })),
-      products_summary: productsReport
-    };
-
-  } catch (error) {
-    console.error("💥 Error en getVentasTotalesMXN:", error);
-    throw error;
-  }
-};
-
 
 
 // 🔎 Obtener TODOS los pedidos dentro de un rango de fechas (con paginación)
@@ -769,27 +693,41 @@ const getConfigsByEmpresaId = async (empresaId) => {
 };
 // 📈 Informe de tendencia de ventas por producto en MXN
 // 📊 Analizar tendencia de ventas de productos en MXN
+// 📊 Analizar tendencia de ventas de productos en MXN
 const getTendenciaProductosMXN = async (idConfig, { startDate, endDate }) => {
   console.log("📊 Calculando tendencia de productos en MXN...");
   console.log("📅 Parámetros recibidos:", { startDate, endDate });
 
   try {
-    // 🔹 Definir rango actual
+    // 🔹 Normalizar fechas para evitar errores por horas
     const start = new Date(startDate);
+    start.setHours(0, 0, 0, 0); // inicio del día
+
     const end = new Date(endDate);
-    const rangoDias = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    end.setHours(23, 59, 59, 999); // fin del día
+
+    // 🔹 Calcular rango de días incluyente
+    const msPorDia = 1000 * 60 * 60 * 24;
+    const rangoDias = Math.floor((end - start) / msPorDia) + 1;
 
     // 🔹 Definir rango anterior equivalente
     const anteriorEnd = new Date(start);
     anteriorEnd.setDate(anteriorEnd.getDate() - 1);
+    anteriorEnd.setHours(23, 59, 59, 999);
+
     const anteriorStart = new Date(anteriorEnd);
     anteriorStart.setDate(anteriorEnd.getDate() - (rangoDias - 1));
+    anteriorStart.setHours(0, 0, 0, 0);
 
-    console.log("📅 Rango actual:", { start, end });
+    console.log("📅 Rango actual:", { start, end, rangoDias });
     console.log("📅 Rango anterior:", { anteriorStart, anteriorEnd });
 
     // 🔄 Obtener pedidos de ambos rangos
-    const pedidosActuales = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    const pedidosActuales = await getAllPedidosByDateRange(idConfig, { 
+      startDate: start.toISOString(), 
+      endDate: end.toISOString() 
+    });
+
     const pedidosAnteriores = await getAllPedidosByDateRange(idConfig, {
       startDate: anteriorStart.toISOString(),
       endDate: anteriorEnd.toISOString()
@@ -815,8 +753,12 @@ const getTendenciaProductosMXN = async (idConfig, { startDate, endDate }) => {
               total_sales: 0
             };
           }
+          // distribuir el total proporcionalmente según cantidad
+          const totalQty = order.products.reduce((sum, p) => sum + p.quantity, 0);
+          const proporcion = item.quantity / totalQty;
+
           map[item.product_id].total_quantity += item.quantity;
-          map[item.product_id].total_sales += order.total * (item.quantity / order.products.reduce((sum, p) => sum + p.quantity, 0));
+          map[item.product_id].total_sales += order.total * proporcion;
         });
       });
       return map;
@@ -872,6 +814,86 @@ const getTendenciaProductosMXN = async (idConfig, { startDate, endDate }) => {
     throw error;
   }
 };
+// 📊 Informe de ventas en MXN con detalle de productos y promedios diarios
+const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Calculando informe extendido de ventas en MXN...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 🔄 Obtener pedidos paginados en el rango
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Pedidos obtenidos del rango: ${pedidos.length}`);
+
+    // Filtrar pedidos en MXN
+    const mxnOrders = pedidos.filter(order => order.currency === "MXN");
+
+    // Calcular rango en días (mínimo 1 día para evitar división por cero)
+    const start = new Date(startDate);
+    const end = endDate ? new Date(endDate) : new Date();
+    const diffTime = end.getTime() - start.getTime();
+const diffDays = Math.max(
+  1,
+  Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
+);
+
+    // Calcular monto total
+    const totalAmount = mxnOrders.reduce((acc, order) => acc + order.total, 0);
+
+    // 📦 Agrupación por producto
+    const productStats = {};
+
+    mxnOrders.forEach(order => {
+      order.products.forEach(item => {
+        if (!productStats[item.product_id]) {
+          productStats[item.product_id] = {
+            product_id: item.product_id,
+            name: item.name,
+            total_quantity: 0,
+            total_sales: 0
+          };
+        }
+        productStats[item.product_id].total_quantity += item.quantity;
+        productStats[item.product_id].total_sales += item.quantity * (order.total / order.products.length);
+      });
+    });
+
+    // Transformar en array y calcular promedio diario
+    const productsReport = Object.values(productStats).map(prod => ({
+      product_id: prod.product_id,
+      name: prod.name,
+      total_quantity: prod.total_quantity,
+      total_sales: prod.total_sales,
+      avg_daily_quantity: (prod.total_quantity / diffDays).toFixed(2),
+      avg_daily_sales: (prod.total_sales / diffDays).toFixed(2)
+    }));
+
+    // Ordenar por cantidad total (más vendidos primero)
+    productsReport.sort((a, b) => b.total_quantity - a.total_quantity);
+
+    return {
+      total_orders_revisados: pedidos.length,
+      total_orders_mxn: mxnOrders.length,
+      total_amount_mxn: totalAmount,
+      rango_dias: diffDays,
+      orders: mxnOrders.map(order => ({
+        id: order.id,
+        total: order.total,
+        currency: order.currency,
+        date_created: order.date_created,
+        customer_name: order.customer_name,
+        customer_email: order.customer_email,
+        payment_method: order.payment_method
+      })),
+      products_summary: productsReport
+    };
+
+  } catch (error) {
+    console.error("💥 Error en getVentasTotalesMXN:", error);
+    throw error;
+  }
+};
+
+
 
 module.exports = {
   getAllConfigs,
