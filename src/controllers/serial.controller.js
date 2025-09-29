@@ -174,7 +174,8 @@ exports.updateSerialController2 = async (req, res) => {
       estado,
       observaciones,
       usuario_id,
-      tienda_woo_id // 👈 viene del front
+      tienda_woo_id,   // 👈 viene del front
+      numero_pedido    // 👈 nuevo campo
     } = req.body;
 
     console.log("id", id);
@@ -192,6 +193,7 @@ exports.updateSerialController2 = async (req, res) => {
       observaciones,
       usuario_id,
       woocommerce_id: tienda_woo_id, // 👈 mapping al modelo
+      numero_pedido                  // 👈 nuevo
     });
 
     res.json({ mensaje: 'Serial actualizado correctamente' });
@@ -200,6 +202,7 @@ exports.updateSerialController2 = async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar serial' });
   }
 };
+
 
 
 

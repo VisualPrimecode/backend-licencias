@@ -63,39 +63,44 @@ const updateSerialEstado = async (id, {
   );
   return result;
 };
-
-const updateSerial2 = async (id, {
-  codigo,
-  producto_id,
-  estado,
-  observaciones,
-  usuario_id,
-  woocommerce_id // 👈 nuevo campo
-}) => {
-  console.log("Actualizando serial con ID:", id);
-  console.log("Datos a actualizar:",codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id);
-  console.log("typeof woocommerce_id:", typeof woocommerce_id, "valor:", woocommerce_id);
-console.log("typeof id:", typeof id, "valor:", id);
-
- const [result] = await db.query(
-  `UPDATE seriales
-   SET codigo = ?,
-       producto_id = ?, 
-       estado = ?, 
-       observaciones = ?, 
-       usuario_id = ?, 
-       woocommerce_id = ? 
-   WHERE id = ?`,
-  [
+const updateSerial2 = async (
+  id,
+  {
     codigo,
     producto_id,
     estado,
     observaciones,
     usuario_id,
     woocommerce_id,
-    Number(id)   // 👈 forzamos a number
-  ]
-);
+    numero_pedido // 👈 nuevo campo
+  }
+) => {
+  console.log("Actualizando serial con ID:", id);
+  console.log("Datos a actualizar:", codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id, numero_pedido);
+  console.log("typeof woocommerce_id:", typeof woocommerce_id, "valor:", woocommerce_id);
+  console.log("typeof id:", typeof id, "valor:", id);
+
+  const [result] = await db.query(
+    `UPDATE seriales
+     SET codigo = ?,
+         producto_id = ?, 
+         estado = ?, 
+         observaciones = ?, 
+         usuario_id = ?, 
+         woocommerce_id = ?,
+         numero_pedido = ?      -- 👈 nuevo campo en la BD
+     WHERE id = ?`,
+    [
+      codigo,
+      producto_id,
+      estado,
+      observaciones,
+      usuario_id,
+      woocommerce_id,
+      numero_pedido, // 👈 en la query
+      Number(id)     // 👈 forzamos a number
+    ]
+  );
 
   return result;
 };
