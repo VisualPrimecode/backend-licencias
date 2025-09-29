@@ -17,15 +17,11 @@ const getEnvioById = async (id) => {
 const createEnvio = async ({
   empresa_id,
   usuario_id,
-  producto_id,
-  id_serial,
   nombre_cliente,
   email_cliente,
   numero_pedido,
   estado = 'pendiente', // ✅ por defecto
-  fecha_envio,
-  woocommerce_id,
-  woo_producto_id
+  fecha_envio
 }) => {
   
 
@@ -35,28 +31,21 @@ const createEnvio = async ({
     `INSERT INTO envios (
       empresa_id,
       usuario_id,
-      producto_id,
-      serial_id,
       nombre_cliente,
       email_cliente,
       numero_pedido,
       estado,
       fecha_envio,
-      woo_id,
-      woo_idproduct
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       empresa_id,
       usuario_id,
-      producto_id,
-      id_serial,
       nombre_cliente,
       email_cliente,
       numero_pedido,
       estado,
-      timestamp,
-      woocommerce_id,
-      woo_producto_id
+      timestamp
     ]
   );
   return result.insertId;
@@ -73,8 +62,6 @@ const updateEstadoEnvio = async (id, nuevoEstado) => {
 const updateEnvio = async (id, {
   empresa_id,
   usuario_id,
-  producto_id,
-  serial_id,
   nombre_cliente,
   email_cliente,
   numero_pedido,
@@ -85,8 +72,6 @@ const updateEnvio = async (id, {
     `UPDATE envios SET
       empresa_id = ?,
       usuario_id = ?,
-      producto_id = ?,
-      serial_id = ?,
       nombre_cliente = ?,
       email_cliente = ?,
       numero_pedido = ?,
@@ -96,8 +81,6 @@ const updateEnvio = async (id, {
     [
       empresa_id,
       usuario_id,
-      producto_id,
-      serial_id,
       nombre_cliente,
       email_cliente,
       numero_pedido,
