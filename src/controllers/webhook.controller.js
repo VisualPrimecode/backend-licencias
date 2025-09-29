@@ -429,53 +429,57 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
 
   try {
     // 2. Procesar cada producto
-    for (const item of items) {
-      const woo_producto_id = item.product_id;
-      const nombre_producto = item.name || null;
-      const cantidad = item.quantity || 1;
+   for (const item of items) {
+  const woo_producto_id = item.product_id;
+  const nombre_producto = item.name || null;
+  const cantidad = item.quantity || 1;
 
-      // 2.1 Mapear producto interno
-      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
-      if (!producto_id) {
-        await registrarEnvioError({
-          empresa_id,
-          usuario_id,
-          numero_pedido,
-          motivo_error: 'PRODUCTO_NO_MAPEADO',
-          detalles_error: `Woo product ID: ${woo_producto_id}`
-        });
-        const err = new Error(`Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`);
-        err.statusCode = 404;
-        throw err;
-      }
+  // Objeto temporal (todavía no lo metemos al array final)
+  const productoProcesado = {
+    producto_id: null,
+    woo_producto_id,
+    nombre_producto,
+    plantilla: null,
+    seriales: []
+  };
 
-      // 2.2 Obtener seriales para cada unidad
-      const seriales = [];
-      for (let i = 0; i < cantidad; i++) {
-        const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
-        if (!serial || !serial.id || !serial.codigo) {
-          const err = new Error(
-            `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
-          );
-          err.statusCode = 404;
-          throw err;
-        }
-        seriales.push({ id_serial: serial.id, codigo: serial.codigo });
-      }
-      console.log(`✅ Seriales asignados para producto ${nombre_producto || producto_id}:`, seriales);
-
-      // 2.3 Obtener plantilla asociada
-      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
-
-      // 2.4 Agregar al array final
-      productosProcesados.push({
-        producto_id,
-        woo_producto_id,
-        nombre_producto,
-        plantilla,
-        seriales
-      });
+  try {
+    // 1. Mapear producto
+    const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
+    if (!producto_id) {
+      throw new Error(`Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`);
     }
+    productoProcesado.producto_id = producto_id;
+
+    // 2. Asignar seriales (puede fallar a medias)
+    for (let i = 0; i < cantidad; i++) {
+      const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
+      if (!serial?.id || !serial?.codigo) {
+        throw new Error(`No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`);
+      }
+      productoProcesado.seriales.push({ id_serial: serial.id, codigo: serial.codigo });
+    }
+    console.log(`✅ Seriales asignados para ${nombre_producto}:`, productoProcesado.seriales);
+
+    // 3. Obtener plantilla
+    productoProcesado.plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+
+    // 4. Si todo salió bien → ya es seguro guardarlo en la lista final
+    productosProcesados.push(productoProcesado);
+
+  } catch (err) {
+    console.error("❌ Error en producto, iniciando rollback inmediato...");
+
+    // Rollback del producto actual (aunque haya quedado a medias)
+    await revertirSeriales([productoProcesado]);
+
+    // Rollback de productos anteriores ya procesados
+    await revertirSeriales(productosProcesados);
+
+    throw err; // abortamos completamente
+  }
+}
+
 
     // 3. Devolver lista final
     return productosProcesados;
