@@ -35,9 +35,9 @@ const createEnvio = async ({
       email_cliente,
       numero_pedido,
       estado,
-      fecha_envio
+      fecha_envio,
     
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
       empresa_id,
       usuario_id,
