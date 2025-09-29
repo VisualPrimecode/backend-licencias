@@ -309,29 +309,88 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
   return false; // No es duplicado
 }
 // Revertir seriales a "disponible"
-async function revertirSeriales(productos) {
-  if (!Array.isArray(productos)) return;
+// revertirSeriales puede recibir:
+// - un array plano de { id_serial, codigo, producto_id }
+// - o un array de "productos" con .seriales -> { seriales: [{ id_serial, codigo }], producto_id }
+async function revertirSeriales(serialesOrProductos, options = {}) {
+  const {
+    wooId = null,
+    numero_pedido = null,
+    empresa_id = null,
+    usuario_id = null,
+    registrarEnvioError = null,
+    // concurrencyLimit opcional si quieres limitar paralelismo
+  } = options || {};
 
-  for (const producto of productos) {
-    if (!Array.isArray(producto.seriales)) continue;
-
-    for (const serial of producto.seriales) {
-      try {
-        await updateSerial2(serial.id_serial, {
-          codigo: serial.codigo,
-          producto_id: producto.producto_id,
-          estado: 'disponible',          // 👈 revertimos estado
-          observaciones: 'Rollback por error en envío',
-          usuario_id: null,              // o quien hizo la operación fallida
-          woocommerce_id: null           // limpiamos si es necesario
+  // Normalizar a lista plana
+  const seriales = [];
+  if (!Array.isArray(serialesOrProductos)) return;
+  for (const p of serialesOrProductos) {
+    if (p && p.id_serial) {
+      // ya es plano
+      seriales.push({
+        id_serial: p.id_serial,
+        codigo: p.codigo,
+        producto_id: p.producto_id ?? p.productoId ?? null
+      });
+    } else if (p && Array.isArray(p.seriales)) {
+      for (const s of p.seriales) {
+        seriales.push({
+          id_serial: s.id_serial ?? s.id ?? null,
+          codigo: s.codigo ?? null,
+          producto_id: p.producto_id ?? p.productoId ?? null
         });
-      } catch (err) {
-        console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
-        // Aquí podrías registrar el fallo en registrarErrorEnvio
       }
     }
   }
+
+  if (seriales.length === 0) return;
+
+  // Ejecutar reversiones en paralelo y capturar resultados
+  const promises = seriales.map(s => (async () => {
+    try {
+      const payload = {
+        codigo: s.codigo,
+        producto_id: s.producto_id,
+        estado: 'disponible',
+        observaciones: `Rollback por error en envío${numero_pedido ? ` - pedido ${numero_pedido}` : ''}${wooId ? ` - woo ${wooId}` : ''}`,
+        usuario_id: null,
+        woocommerce_id: null
+      };
+      await updateSerial2(s.id_serial, payload);
+      return { id_serial: s.id_serial, ok: true };
+    } catch (err) {
+      console.error(`❌ Error revirtiendo serial ${s.id_serial}:`, err);
+      // registrar fallo de rollback si se pasó la función
+      if (typeof registrarEnvioError === 'function') {
+        try {
+          await registrarEnvioError({
+            empresa_id,
+            usuario_id,
+            numero_pedido,
+            motivo_error: 'ROLLBACK_SERIAL_FAIL',
+            detalles_error: `serial ${s.id_serial} - ${err.message || err.toString()}`
+          });
+        } catch (regErr) {
+          console.error('❌ Error registrando fallo de rollback:', regErr);
+        }
+      }
+      return { id_serial: s.id_serial, ok: false, error: err.message || err.toString() };
+    }
+  })());
+
+  const results = await Promise.allSettled(promises);
+
+  // resumen (log)
+  const failed = results.filter(r => r.status === 'fulfilled' ? r.value && !r.value.ok : true);
+  if (failed.length) {
+    console.warn(`⚠️ ${failed.length} serial(es) no pudieron revertirse correctamente.`);
+  } else {
+    console.log(`↩️ Rollback de ${seriales.length} serial(es) completado correctamente.`);
+  }
 }
+
+
 /*
 
 
@@ -407,7 +466,15 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
 
 
 */
-async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numero_pedido, registrarEnvioError, currency) {
+async function procesarProductos(
+  lineItems,
+  wooId,
+  empresa_id,
+  usuario_id,
+  numero_pedido,
+  registrarEnvioError,
+  currency
+) {
   const productosProcesados = [];
   const items = Array.isArray(lineItems) ? lineItems : [];
 
@@ -424,73 +491,116 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
     throw err;
   }
 
-  // 2. Validar precios si corresponde
+  // 2. Validar precios (si aplica)
   await validarPreciosProductos(items, currency, registrarEnvioError, empresa_id, usuario_id, numero_pedido);
 
   try {
-    // 2. Procesar cada producto
+    // 3. Procesar cada producto, garantizando rollback inmediato si falla algo
     for (const item of items) {
-      const woo_producto_id = item.product_id;
-      const nombre_producto = item.name || null;
-      const cantidad = item.quantity || 1;
+      // objeto temporal para este producto (incluye seriales parciales)
+      const productoProcesado = {
+        producto_id: null,
+        woo_producto_id: item.product_id,
+        nombre_producto: item.name || null,
+        plantilla: null,
+        seriales: []
+      };
 
-      // 2.1 Mapear producto interno
-      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
-      if (!producto_id) {
-        await registrarEnvioError({
-          empresa_id,
-          usuario_id,
-          numero_pedido,
-          motivo_error: 'PRODUCTO_NO_MAPEADO',
-          detalles_error: `Woo product ID: ${woo_producto_id}`
-        });
-        const err = new Error(`Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`);
-        err.statusCode = 404;
-        throw err;
-      }
+      try {
+        const woo_producto_id = item.product_id;
+        const cantidad = item.quantity || 1;
 
-      // 2.2 Obtener seriales para cada unidad
-      const seriales = [];
-      for (let i = 0; i < cantidad; i++) {
-        const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
-        if (!serial || !serial.id || !serial.codigo) {
-          const err = new Error(
-            `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
-          );
+        // 3.1 Mapear producto interno (puede lanzar)
+        const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
+        if (!producto_id) {
+          await registrarEnvioError({
+            empresa_id,
+            usuario_id,
+            numero_pedido,
+            motivo_error: 'PRODUCTO_NO_MAPEADO',
+            detalles_error: `Woo product ID: ${woo_producto_id}`
+          });
+          const err = new Error(`Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`);
           err.statusCode = 404;
           throw err;
         }
-        seriales.push({ id_serial: serial.id, codigo: serial.codigo });
+        productoProcesado.producto_id = producto_id;
+
+        // 3.2 Reservar seriales para la cantidad (se van acumulando en productoProcesado.seriales)
+        for (let i = 0; i < cantidad; i++) {
+          const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
+          if (!serial || !serial.id || !serial.codigo) {
+            const err = new Error(
+              `No hay serial válido para la unidad ${i + 1} del producto ${productoProcesado.nombre_producto || producto_id}`
+            );
+            err.statusCode = 404;
+            throw err;
+          }
+          // guardamos el serial reservado (parcial o completo)
+          productoProcesado.seriales.push({ id_serial: serial.id, codigo: serial.codigo });
+        }
+
+        // 3.3 Obtener plantilla (puede lanzar)
+        productoProcesado.plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+
+        // 3.4 Si todo OK → push a array final
+        productosProcesados.push(productoProcesado);
+
+      } catch (errProducto) {
+        // Si falla en este producto, revertimos:
+        // - los seriales ya asignados para este producto (productoProcesado.seriales)
+        // - los seriales de productos previos (productosProcesados)
+        try {
+          const toRevert = [];
+          if (productosProcesados.length) toRevert.push(...productosProcesados);
+          if (productoProcesado.seriales && productoProcesado.seriales.length) toRevert.push(productoProcesado);
+
+          if (toRevert.length) {
+            await revertirSeriales(toRevert);
+            console.log('↩️ Rollback de seriales completado tras error en producto');
+          }
+        } catch (rollbackErr) {
+          // Si el rollback falla, lo registramos (no queremos ocultar el fallo original)
+          console.error('⚠️ Error durante rollback de seriales:', rollbackErr);
+          await registrarEnvioError({
+            empresa_id,
+            usuario_id,
+            numero_pedido,
+            motivo_error: 'ROLLBACK_FALLIDO',
+            detalles_error: rollbackErr.stack || rollbackErr.message
+          });
+        }
+
+        // Re-lanzamos el error original del producto para que el flujo superior lo maneje
+        throw errProducto;
       }
-      console.log(`✅ Seriales asignados para producto ${nombre_producto || producto_id}:`, seriales);
-
-      // 2.3 Obtener plantilla asociada
-      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
-
-      // 2.4 Agregar al array final
-      productosProcesados.push({
-        producto_id,
-        woo_producto_id,
-        nombre_producto,
-        plantilla,
-        seriales
-      });
     }
 
-    // 3. Devolver lista final
+    // 4. Devolver lista final si todo salió bien
     return productosProcesados;
 
   } catch (error) {
-    console.error("❌ Error durante procesarProductos, iniciando rollback de seriales...", error);
+    // En el catch superior (por si algo no previsto sucede)
+    // Aseguramos que todo lo que estuviera en productosProcesados también intente revertirse
     try {
-      await revertirSeriales(productosProcesados, wooId);
-      console.log("↩️ Rollback de seriales completado correctamente");
-    } catch (rollbackError) {
-      console.error("⚠️ Error durante rollback de seriales:", rollbackError);
+      if (productosProcesados.length) {
+        await revertirSeriales(productosProcesados);
+        console.log('↩️ Rollback de seriales completado en catch superior');
+      }
+    } catch (rollbackErr) {
+      console.error('⚠️ Error durante rollback en catch superior:', rollbackErr);
+      await registrarEnvioError({
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        motivo_error: 'ROLLBACK_FALLIDO_CATCH',
+        detalles_error: rollbackErr.stack || rollbackErr.message
+      });
     }
-    throw error; // re-lanza el error original
+    throw error;
   }
 }
+
 
 async function getPlantillaConFallback(producto_id, woo_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
