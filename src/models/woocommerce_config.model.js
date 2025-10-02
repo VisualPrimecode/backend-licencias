@@ -814,6 +814,7 @@ const getTendenciaProductosMXN = async (idConfig, { startDate, endDate }) => {
     throw error;
   }
 };
+
 // 📊 Informe de ventas en MXN con detalle de productos y promedios diarios
 const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
   console.log("📊 Calculando informe extendido de ventas en MXN...");
@@ -830,7 +831,6 @@ const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
     // Calcular rango en días (mínimo 1 día para evitar división por cero)
     const start = new Date(startDate);
     const end = endDate ? new Date(endDate) : new Date();
-    const diffTime = end.getTime() - start.getTime();
 const diffDays = Math.max(
   1,
   Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1
@@ -894,6 +894,71 @@ const diffDays = Math.max(
 };
 
 
+// 📦 Informe de ventas por país/divisa
+const getVentasPorPais = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Generando informe de ventas por país/divisa...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+  try {
+    // 1️⃣ Obtener pedidos en el rango de fechas
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Pedidos obtenidos para informe por país: ${pedidos.length}`);
+
+    // 🔄 Tasas de conversión a CLP (ejemplo, actualizar según corresponda)
+     const conversionRates = {
+      MXN: 52,   // 1 MXN → CLP
+      PEN: 276,  // 1 PEN → CLP
+      COP: 0.24, // 1 COP → CLP
+      CLP: 1,    // nativo
+    };
+
+    // 2️⃣ Agrupar ventas por currency
+    const ventasPorPais = pedidos.reduce((acc, pedido) => {
+      const currency = pedido.currency || "UNKNOWN";
+
+      if (!acc[currency]) {
+        acc[currency] = {
+          currency,
+          total_ventas: 0,
+          total_pedidos: 0,
+          total_ventas_clp: 0,
+          total_ventas_clp_formatted: "0",
+        };
+      }
+
+      const total = parseFloat(pedido.total) || 0;
+      acc[currency].total_ventas += total;
+      acc[currency].total_pedidos += 1;
+
+      if (conversionRates[currency]) {
+        acc[currency].total_ventas_clp += total * conversionRates[currency];
+        acc[currency].total_ventas_clp_formatted =
+          acc[currency].total_ventas_clp.toLocaleString("es-CL");
+      }
+
+      return acc;
+    }, {});
+
+    // 3️⃣ Convertir a array ordenado por total_ventas_clp desc
+    const ventasArray = Object.values(ventasPorPais).sort(
+      (a, b) => b.total_ventas_clp - a.total_ventas_clp
+    );
+
+    // 4️⃣ Construir informe
+    return {
+      total_orders: pedidos.length,
+      total_sales: ventasArray.reduce((sum, v) => sum + v.total_ventas_clp, 0),
+      total_sales_formatted: ventasArray
+        .reduce((sum, v) => sum + v.total_ventas_clp, 0)
+        .toLocaleString("es-CL"),
+      ventas_por_pais: ventasArray,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar informe de ventas por país:", error);
+    throw error;
+  }
+};
+
 
 module.exports = {
   getAllConfigs,
@@ -910,5 +975,6 @@ module.exports = {
   getAllProducts,
   syncProductsFromStore,
   getVentasTotalesMXN,
-  getTendenciaProductosMXN
+  getTendenciaProductosMXN,
+  getVentasPorPais
 };

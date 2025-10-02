@@ -171,6 +171,25 @@ exports.deleteConfig = async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar configuración' });
   }
 };
+exports.getVentasPorPais = async (req, res) => {
+  console.log('📊 Generando informe de ventas por país/divisa...');
+  try {
+    const { id } = req.params; // ID de la configuración de WooCommerce
+    const { startDate, endDate } = req.query; // rango de fechas desde query params
+
+    const informe = await WooConfig.getVentasPorPais(id, { startDate, endDate });
+
+    if (!informe || informe.total_orders === 0) {
+      return res.status(404).json({ message: 'No se encontraron ventas en el periodo indicado' });
+    }
+
+    res.json(informe);
+  } catch (error) {
+    console.error('💥 Error al generar informe de ventas por país/divisa:', error);
+    res.status(500).json({ error: 'Error al generar informe de ventas por país/divisa' });
+  }
+};
+
 exports.getVentasTotalesMXN = async (req, res) => {
   console.log('📊 Generando informe de ventas en MXN...');
   try {
