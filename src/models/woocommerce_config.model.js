@@ -481,7 +481,7 @@ const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
 
 
 // 🔎 Obtener TODOS los pedidos dentro de un rango de fechas (con paginación)
-const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
+const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => { 
   console.log("⏳ Iniciando búsqueda de pedidos por rango de fechas...");
   console.log("📅 Filtros recibidos:", { startDate, endDate });
 
@@ -536,35 +536,34 @@ const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
 
       // Mapear al formato que ya usamos en getPedidos
       const formattedOrders = validOrders.map(order => ({
-  id: order.id,
-  customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
-  customer_email: order.billing.email,
-  status: order.status,
-  total: parseFloat(order.total || 0),
-  currency: order.currency,
-  payment_method: order.payment_method_title || order.payment_method,
-  date: order.date_created, // 👈 guardar fecha original en ISO
-  products: order.line_items.map(item => {
-    const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+        id: order.id,
+        customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+        customer_email: order.billing.email,
+        status: order.status,
+        total: parseFloat(order.total || 0),
+        currency: order.currency,
+        payment_method: order.payment_method_title || order.payment_method,
+        date: order.date_created, // 👈 guardar fecha original en ISO
+        products: order.line_items.map(item => {
+          const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
 
-    const extra_options = Array.isArray(extraOptionData?.value)
-      ? extraOptionData.value.map(opt => ({
-          name: opt.name,
-          value: opt.value,
-          price: opt.price || 0
-        }))
-      : [];
+          const extra_options = Array.isArray(extraOptionData?.value)
+            ? extraOptionData.value.map(opt => ({
+                name: opt.name,
+                value: opt.value,
+                price: opt.price || 0
+              }))
+            : [];
 
-    return {
-      product_id: item.product_id,
-      name: item.name,
-      quantity: item.quantity,
-      variation_id: item.variation_id || null,
-      extra_options
-    };
-  })
-}));
-
+          return {
+            product_id: item.product_id,
+            name: item.name,
+            quantity: item.quantity,
+            variation_id: item.variation_id || null,
+            extra_options
+          };
+        })
+      }));
 
       allOrders.push(...formattedOrders);
 
@@ -575,14 +574,21 @@ const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
       }
     }
 
-    console.log(`✅ Pedidos obtenidos en total: ${allOrders.length}`);
-    return allOrders;
+    // 🛡️ Filtro extra estricto por fecha
+    const strictlyFilteredOrders = allOrders.filter(p => {
+      const created = new Date(p.date);
+      return created >= start && created <= end;
+    });
+
+    console.log(`📦 Pedidos crudos: ${allOrders.length}, después de filtro estricto: ${strictlyFilteredOrders.length}`);
+    return strictlyFilteredOrders;
 
   } catch (error) {
     console.error("💥 Error obteniendo pedidos por rango:", error.response?.data || error);
     throw error;
   }
 };
+
 
 const getPedidosInforme = async (id, queryParams = {}) => {
   console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
