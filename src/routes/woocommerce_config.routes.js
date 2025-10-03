@@ -41,6 +41,10 @@ router.get('/woo/:id/tendencia-mxn', wooConfigController.getTendenciaProductosMX
 // 🚀 Nueva ruta para informe de ventas por país/divisa
 router.get('/woo/:id/ventas-por-pais', wooConfigController.getVentasPorPais);
 
+// 🚀 Nueva ruta para informe GLOBAL de ventas por país/divisa (consolidado de todas las tiendas)
+router.get('/woo/ventas-por-pais/global', wooConfigController.getVentasPorPaisGlobal);
+
+
 // 🚀 Nueva ruta para sincronizar productos
 router.post('/woo/:storeId/sync-products', wooConfigController.syncProducts);
 

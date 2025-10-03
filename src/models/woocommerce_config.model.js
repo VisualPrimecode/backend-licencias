@@ -958,6 +958,69 @@ const getVentasPorPais = async (idConfig, { startDate, endDate }) => {
     throw error;
   }
 };
+const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
+  console.log("🌎 Generando informe GLOBAL de ventas por país...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 1️⃣ Definir las tiendas fijas
+    const tiendas = [
+      { idConfig: 3, nombre: "licenciasorginales" },
+      { idConfig: 4, nombre: "licenciassoftware" },
+      { idConfig: 5, nombre: "licenciasdigitales" },
+    ];
+
+    // 2️⃣ Ejecutar getVentasPorPais para cada tienda
+    const informesTiendas = [];
+    for (const tienda of tiendas) {
+      const informe = await getVentasPorPais(tienda.idConfig, { startDate, endDate });
+      informesTiendas.push({ ...tienda, ...informe });
+    }
+
+    // 3️⃣ Consolidar resultados por currency
+    const globalVentas = {};
+    informesTiendas.forEach((tienda) => {
+      tienda.ventas_por_pais.forEach((venta) => {
+        if (!globalVentas[venta.currency]) {
+          globalVentas[venta.currency] = {
+            currency: venta.currency,
+            total_ventas: 0,
+            total_pedidos: 0,
+            total_ventas_clp: 0,
+            total_ventas_clp_formatted: "0",
+          };
+        }
+
+        globalVentas[venta.currency].total_ventas += venta.total_ventas;
+        globalVentas[venta.currency].total_pedidos += venta.total_pedidos;
+        globalVentas[venta.currency].total_ventas_clp += venta.total_ventas_clp;
+        globalVentas[venta.currency].total_ventas_clp_formatted =
+          globalVentas[venta.currency].total_ventas_clp.toLocaleString("es-CL");
+      });
+    });
+
+    // 4️⃣ Convertir a array ordenado
+    const ventasPorPaisArray = Object.values(globalVentas).sort(
+      (a, b) => b.total_ventas_clp - a.total_ventas_clp
+    );
+
+    // 5️⃣ Construir informe final
+    const totalOrders = informesTiendas.reduce((sum, t) => sum + t.total_orders, 0);
+    const totalSalesCLP = ventasPorPaisArray.reduce((sum, v) => sum + v.total_ventas_clp, 0);
+
+    return {
+      total_orders: totalOrders,
+      total_sales: totalSalesCLP,
+      total_sales_formatted: totalSalesCLP.toLocaleString("es-CL"),
+      ventas_por_pais: ventasPorPaisArray,
+      detalle_por_tienda: informesTiendas,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar informe GLOBAL de ventas por país:", error);
+    throw error;
+  }
+};
 
 
 module.exports = {
@@ -976,5 +1039,6 @@ module.exports = {
   syncProductsFromStore,
   getVentasTotalesMXN,
   getTendenciaProductosMXN,
-  getVentasPorPais
+  getVentasPorPais,
+  getVentasPorPaisGlobal
 };

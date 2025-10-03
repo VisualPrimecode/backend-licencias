@@ -227,3 +227,20 @@ exports.getTendenciaProductosMXN = async (req, res) => {
     res.status(500).json({ error: 'Error al generar informe de tendencia de productos en MXN' });
   }
 };
+exports.getVentasPorPaisGlobal = async (req, res) => {
+  console.log("🌎 Generando informe GLOBAL de ventas por país...");
+  try {
+    const { startDate, endDate } = req.query;
+
+    const informe = await WooConfig.getVentasPorPaisGlobal({ startDate, endDate });
+
+    if (!informe) {
+      return res.status(404).json({ message: "No se encontraron ventas para el periodo indicado" });
+    }
+
+    res.json(informe);
+  } catch (error) {
+    console.error("💥 Error al generar informe GLOBAL de ventas por país:", error);
+    res.status(500).json({ error: "Error al generar informe GLOBAL de ventas por país" });
+  }
+};
