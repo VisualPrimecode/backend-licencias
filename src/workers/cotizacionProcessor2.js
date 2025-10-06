@@ -2,7 +2,7 @@ const { sendCotizacionCorreo } = require('../utils/mailer');
 
 module.exports = async function cotizacionProcessor(job) {
   const cotizacion = job.data;
-  const plantilla = cotizacion.plantilla;
+  const plantilla = cotizacion.plantilla; // 👈 viene desde createCotizacion
 
   console.log(`📝 Procesando job de cotización para ${cotizacion.email_destino}`);
   console.log('Datos de la cotización:', cotizacion);
@@ -11,88 +11,58 @@ module.exports = async function cotizacionProcessor(job) {
     const smtpConfig = cotizacion.smtpConfig;
 
     if (!smtpConfig || !smtpConfig.host || !smtpConfig.user || !smtpConfig.pass) {
-      throw new Error('❌ Configuración SMTP inválida o incompleta recibida en el job');
+      throw new Error(`❌ Configuración SMTP inválida o incompleta recibida en el job`);
     }
 
-    // 💱 Detectar moneda y formato
-    const moneda = cotizacion.monedaDestino || cotizacion.moneda || 'CLP';
+    // ✅ Función para aplicar separador de miles
+    const formatoMiles = numero => Number(numero).toLocaleString('es-CL');
 
-    // Configuración de formato por moneda
-    const getCurrencyInfo = (currency) => {
-      switch (currency) {
-        case 'USD':
-          return { locale: 'en-US', symbol: '$', suffix: 'USD', decimals: 2 };
-        case 'COP':
-          return { locale: 'es-CO', symbol: '$', suffix: 'COP', decimals: 0 };
-        case 'ARS':
-          return { locale: 'es-AR', symbol: '$', suffix: 'ARS', decimals: 0 };
-        case 'MXN':
-          return { locale: 'es-MX', symbol: '$', suffix: 'MXN', decimals: 2 };
-        case 'PEN':
-          return { locale: 'es-PE', symbol: 'S/', suffix: 'PEN', decimals: 2 };
-        default:
-          return { locale: 'es-CL', symbol: '$', suffix: 'CLP', decimals: 0 };
-      }
-    };
-
-    const { locale, symbol, suffix, decimals } = getCurrencyInfo(moneda);
-
-    // ✅ Función de formato de moneda con símbolo + sufijo
-    const formatoMoneda = (valor) =>
-      `${symbol}${Number(valor).toLocaleString(locale, {
-        minimumFractionDigits: decimals,
-        maximumFractionDigits: decimals
-      })} ${suffix}`;
-
-    // 🧮 Calcular valores
+    // ✅ Calcular subtotal sin IVA
     const total = Number(cotizacion.total || 0);
-    const subtotal = Number(cotizacion.subtotal || total / 1.19);
-    const iva = Number(cotizacion.iva || total - subtotal);
+    const subtotal = total / 1.19;
 
-    // 🧾 Formatear valores
-    const totalFormateado = formatoMoneda(total);
-    const subtotalFormateado = formatoMoneda(subtotal);
-    const ivaFormateado = formatoMoneda(iva);
+    const totalFormateado = formatoMiles(total);
+    const subtotalFormateado = formatoMiles(subtotal.toFixed(0));
+    const iva = total - subtotal;
+    const ivaFormateado = formatoMiles(iva.toFixed(0));
 
-    // 🛒 Generar tabla de productos
-    const productos = Array.isArray(cotizacion.productos) ? cotizacion.productos : [];
+    // 🧾 Generar tabla de productos en HTML
+    const productosHtml = cotizacion.productos.map(p => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #ddd;">${p.name}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${p.cantidad}</td>
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">$${formatoMiles(p.price)}</td>
+      </tr>
+    `).join('');
 
-    const productosHtml = productos.map(p => {
-      const precio = formatoMoneda(p.price);
-      return `
-        <tr>
-          <td style="padding: 8px; border: 1px solid #ddd;">${p.name}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${p.cantidad}</td>
-          <td style="padding: 8px; border: 1px solid #ddd; text-align: right;">${precio}</td>
-        </tr>
-      `;
-    }).join('');
+    console.log('🔎 HTML original:', plantilla.cuerpo_html);
+    console.log('🧠 Nombre cliente:', cotizacion.nombre_cliente);
 
-    // 🧠 Reemplazar placeholders en plantilla
     let htmlContent = plantilla.cuerpo_html || '';
     htmlContent = htmlContent
-      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'Cliente')
+      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'cliente')
       .replace(/{{numero_cotizacion}}/g, cotizacion.numero_cotizacion || 'N/A')
       .replace(/{{total}}/g, totalFormateado)
       .replace(/{{subtotal}}/g, subtotalFormateado)
-      .replace(/{{iva}}/g, ivaFormateado)
+      .replace(/{{iva}}/g, ivaFormateado) // 👈 NUEVO
       .replace(/{{tabla_productos}}/g, productosHtml)
       .replace(/{{firma}}/g, plantilla.firma || '')
       .replace(/{{logo_url}}/g, plantilla.logo_url || '')
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
       .replace(/{{validez_texto}}/g, plantilla.validez_texto || '');
 
-    // ✉️ Asunto con reemplazos
+   // console.log('📨 HTML con reemplazos:', htmlContent);
+
+    // ✉️ Asunto con reemplazos también (opcional)
     const subject = (plantilla.asunto || 'Tu cotización')
-      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'Cliente')
+      .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'cliente')
       .replace(/{{numero_cotizacion}}/g, cotizacion.numero_cotizacion || 'N/A');
 
-    // 📤 Enviar correo
     await sendCotizacionCorreo({
       smtpConfig,
       to: cotizacion.email_destino,
       subject,
-      text: `Hola ${cotizacion.nombre_cliente}, aquí está tu cotización en ${moneda}.`,
+      text: `Hola ${cotizacion.nombre_cliente}, aquí está tu cotización solicitada.`,
       html: htmlContent
     });
 
