@@ -27,8 +27,9 @@ const correosConfigRoutes = require('./routes/correosConfig.routes');
 const dbConnectionConfigRoutes = require('./routes/dbConnectionConfig.routes');
 const informesRoutes = require('./routes/informes.routes');
 const cotizacionRoutes = require('./routes/cotizacion.routes');
-const envioerrores = require('./routes/enviosErrores.routes')
-const envioProductos = require('./routes/envioProducto.routes')
+const envioerrores = require('./routes/enviosErrores.routes');
+const envioProductos = require('./routes/envioProducto.routes');
+const currencyRoutes = require('./routes/currency.routes');
 
 
 const app = express();
@@ -58,6 +59,7 @@ app.use('/api/informes', informesRoutes);
 app.use('/api/cotizacion', cotizacionRoutes);
 app.use('/api/errorEnvio', envioerrores);
 app.use('/api/envioProductos', envioProductos);
+app.use('/api/currency', currencyRoutes);
 
 // Ruta raíz
 app.get('/', (req, res) => {
