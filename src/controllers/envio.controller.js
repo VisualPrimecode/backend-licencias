@@ -5,6 +5,7 @@ const envioProductosQueue = require('../queues/productosEnvioQueue');
 const Plantilla = require('../models/plantilla.model');
 const Serial = require('../models/serial.model');
 const WooProductMapping = require('../models/wooProductMapping.model');
+const currencyModel = require('../models/currency.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const { createCotizacion, createEnvioPersonalizado } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
@@ -600,25 +601,29 @@ exports.createEnvio = async (req, res) => {
 
 //envio cotizacion metodo controller
 exports.createCotizacion = async (req, res) => {
-  console.log('📝 Creando nueva cotización...');
-  console.log('Datos de la cotización:', req.body);
-  console.log("Datos de la cotización:", JSON.stringify(req.body, null, 2));
-
+  console.log('📝 Creando nueva cotización44s...');
+  console.log('Datos de la cotización:', JSON.stringify(req.body, null, 2));
 
   try {
     // ✅ Obtener plantilla relacionada a la tienda y motivo 'cotizacion'
-    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(req.body.woocommerce_id, 'cotizacion');
+    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(
+      req.body.woocommerce_id,
+      'cotizacion'
+    );
 
     if (!plantillas || plantillas.length === 0) {
       return res.status(404).json({ error: 'No se encontró plantilla para cotización en esta tienda' });
     }
 
-    const plantilla = plantillas[0]; // asumes que usas la primera encontrada
+    const plantilla = plantillas[0];
+
+    // ✅ Preparar datos base
     const cotizacionData = {
       ...req.body,
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
       numero_cotizacion: req.body.numero_cotizacion || 'N/A',
-      store_id: req.body.woocommerce_id || 3
+      store_id: req.body.woocommerce_id || 3,
+      moneda: req.body.moneda || 'CLP' // 👈 nueva moneda con valor por defecto
     };
 
     console.log('Datos de la cotización procesados:', cotizacionData);
@@ -635,7 +640,6 @@ exports.createCotizacion = async (req, res) => {
       });
     }
 
-
     // ✅ Obtener configuración SMTP desde la BD
     const config = await getSMTPConfigByStoreId(cotizacionData.store_id);
     if (!config) {
@@ -649,56 +653,104 @@ exports.createCotizacion = async (req, res) => {
       user: config.smtp_username,
       pass: config.smtp_password
     };
-    //console.log('datos enviados a cotizacionProcessor:');
-    // ✅ Encolar el trabajo para el worker
-   /* console.log('cotizacionData:', cotizacionData);
-    console.log('smtpConfig:', smtpConfig);
-    console.log('plantilla:', plantilla);*/
 
-    // 🧮 Calcular subtotal e IVA
-const total = Number(cotizacionData.total || 0);
-const subtotal = Number((total / 1.19).toFixed(0));
-const iva = total - subtotal;
+    // 🧮 Calcular subtotal e IVA base en CLP
+    const totalCLP = Number(cotizacionData.total || 0);
+    const subtotalCLP = Number((totalCLP / 1.19).toFixed(0));
+    const ivaCLP = totalCLP - subtotalCLP;
 
-// 🧾 Construir HTML básico con placeholders (opcional si quieres guardarlo sin reemplazos)
-const cuerpo_html = plantilla.cuerpo_html || '';
-const asunto_correo = plantilla.asunto || 'Cotización';
+    // 🏦 Obtener tasas de cambio
+    const rates = await currencyModel.getAllRates();
+    let total = totalCLP;
+    let subtotal = subtotalCLP;
+    let iva = ivaCLP;
+    let tasaUsada = 1;
+    let baseCurrency = 'CLP';
+    const monedaDestino = cotizacionData.moneda;
 
-// 🗂️ Registrar en BD (con estado PENDIENTE)
-const id = await createCotizacion({
-  id_usuario: cotizacionData.usuario_id,
-  id_woo: cotizacionData.woocommerce_id,
-  id_empresa: cotizacionData.empresa_id,
-  nombre_cliente: cotizacionData.nombre_cliente,
-  email_destino: cotizacionData.email_destino,
-  total,
-  subtotal,
-  iva,
-  productos_json: cotizacionData.productos,
-  smtp_host: smtpConfig.host,
-  smtp_user: smtpConfig.user,
-  plantilla_usada: plantilla.id, // o plantilla.asunto si prefieres
-  asunto_correo,
-  cuerpo_html, // sin reemplazos aún
-  estado_envio: 'PENDIENTE', 
-  mensaje_error: null
-});
+    // 💱 Si la moneda es distinta de CLP, convertir valores
+    if (monedaDestino && monedaDestino !== 'CLP') {
+      const rateData = rates.find(r => r.target_currency === monedaDestino);
 
+      if (!rateData) {
+        return res.status(400).json({
+          error: `No se encontró tasa de cambio para la moneda ${monedaDestino}`
+        });
+      }
+
+      tasaUsada = Number(rateData.rate);
+      total = Number((totalCLP * tasaUsada).toFixed(2));
+      subtotal = Number((subtotalCLP * tasaUsada).toFixed(2));
+      iva = Number((ivaCLP * tasaUsada).toFixed(2));
+
+      console.log(
+        `💱 Conversión aplicada: 1 ${baseCurrency} = ${tasaUsada} ${monedaDestino}`
+      );
+
+      // 🧾 También convertir precios de productos
+      if (Array.isArray(cotizacionData.productos)) {
+        cotizacionData.productos = cotizacionData.productos.map(p => {
+          const precioCLP = Number(p.price || 0);
+          const precioConvertido = Number((precioCLP * tasaUsada).toFixed(2));
+          return {
+            ...p,
+            price_clp: precioCLP,
+            price: precioConvertido
+          };
+        });
+      }
+    }
+
+    // 🧾 Construir HTML básico con placeholders
+    const cuerpo_html = plantilla.cuerpo_html || '';
+    const asunto_correo = plantilla.asunto || 'Cotización';
+
+    // 🗂️ Registrar en BD (estado PENDIENTE)
+    const id = await createCotizacion({
+      id_usuario: cotizacionData.usuario_id,
+      id_woo: cotizacionData.woocommerce_id,
+      id_empresa: cotizacionData.empresa_id,
+      nombre_cliente: cotizacionData.nombre_cliente,
+      email_destino: cotizacionData.email_destino,
+      total,
+      subtotal,
+      iva,
+      moneda: monedaDestino,          // 👈 nueva columna
+      tasa_cambio: tasaUsada,         // 👈 nueva columna
+      base_currency: baseCurrency,    // 👈 nueva columna
+      productos_json: cotizacionData.productos,
+      smtp_host: smtpConfig.host,
+      smtp_user: smtpConfig.user,
+      plantilla_usada: plantilla.id,
+      asunto_correo,
+      cuerpo_html,
+      estado_envio: 'PENDIENTE',
+      mensaje_error: null
+    });
+
+    // 📦 Encolar job para envío
     await cotizacionQueue.add({
       id,
       ...cotizacionData,
+      total,
+      subtotal,
+      iva,
+      tasaUsada,
+      baseCurrency,
+      monedaDestino,
       smtpConfig,
-      plantilla // 👈 añadimos la plantilla que recuperamos
+      plantilla
     });
 
-    console.log('✅ Job de cotización encolado');
-return res.status(201).json({ cotizacion_id: id });
+    console.log('✅ Job de cotización encolado correctamente');
+    return res.status(201).json({ cotizacion_id: id });
 
   } catch (error) {
     console.error('❌ Error al crear cotización:', error);
     return res.status(500).json({ error: 'Error al crear cotización' });
   }
 };
+
 //envio de productos personalizados
 exports.envioProductos = async (req, res) => { 
   console.log('📝 Creando un nuevo envio de productos...');

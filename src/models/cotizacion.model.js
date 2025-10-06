@@ -34,6 +34,7 @@ const createCotizacion = async (datos) => {
     nombre_cliente,
     email_destino,
     total,
+    moneda,
     subtotal,
     iva,
     productos_json,
@@ -43,15 +44,16 @@ const createCotizacion = async (datos) => {
     asunto_correo,
     cuerpo_html,
     estado_envio = 'PENDIENTE',
-    mensaje_error = null
+    mensaje_error = null,
+    
   } = datos;
-
+  console.log('Creando cotización con los siguientes datos:', datos);
   const [result] = await db.query(
     `INSERT INTO cotizaciones_enviadas (
-      id_usuario, id_woo, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
+      id_usuario, id_woo, id_empresa, nombre_cliente, email_destino, total, moneda, subtotal, iva,
       productos_json, smtp_host, smtp_user, plantilla_usada,
       asunto_correo, cuerpo_html, estado_envio, mensaje_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id_usuario,
       id_woo,
@@ -59,6 +61,7 @@ const createCotizacion = async (datos) => {
       nombre_cliente,
       email_destino,
       total,
+      moneda,
       subtotal,
       iva,
       JSON.stringify(productos_json),

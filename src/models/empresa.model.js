@@ -332,5 +332,6 @@ module.exports = {
   getEmpresaNameById,
   getEmpresaByName,
   getProductoInternoByEmpresaYProducto,
-  getEmpresaByWooConfigId
+  getEmpresaByWooConfigId,
+  getProductoInternoId
 };

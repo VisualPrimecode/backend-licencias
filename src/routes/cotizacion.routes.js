@@ -11,7 +11,7 @@ router.get('/:id', cotizacionController.getCotizacionById);
 router.get('/:id/cotizaciones', cotizacionController.getCotizacionesByIdWooController);
 
 // Crear una nueva cotización
-router.post('/', cotizacionController.createCotizacion);
+//router.post('/', cotizacionController.createCotizacion);
 
 
 router.put('/:id/estadoPersonalizado', cotizacionController.updateEnvioPersonalizadoEstado);
