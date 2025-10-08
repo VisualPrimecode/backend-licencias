@@ -15,6 +15,7 @@ const productoRoutes = require('./routes/producto.routes');
 const plantillaRoutes = require('./routes/plantilla.routes');
 const serialRoutes = require('./routes/serial.routes');
 const envioRoutes = require('./routes/envio.routes');
+const webhookRoutes = require('./routes/webhook.routes');
 //rutas auxliares para intereactuar con la api de woocomerse
 const wooRoutes = require('./routes/woocomerce.routes');
 //rutas para crud de datos de configuracion de woocomerce

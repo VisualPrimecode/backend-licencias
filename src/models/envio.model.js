@@ -28,7 +28,7 @@ const createEnvio = async ({
   woo_producto_id
 }) => {
   
-  console.log('datos recibidos para crear envio:', empresa_id, usuario_id, producto_id, id_serial, nombre_cliente, email_cliente, numero_pedido, estado, fecha_envio, woocommerce_id, woo_producto_id);
+
   const timestamp = fecha_envio || new Date(); // ⏱️ usa timestamp actual si no se pasa fecha_envio
 
   const [result] = await db.query(
