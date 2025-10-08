@@ -3,6 +3,7 @@ const Queue = require('bull');
 console.log('🔁 Inicializando cola de cotización...');
 
 
+
 const cotizacionQueue = new Queue('cotizacionQueue', {
   redis: {
     port: 6379,
