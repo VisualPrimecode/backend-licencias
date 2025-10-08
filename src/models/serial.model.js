@@ -280,12 +280,11 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
       `SELECT id, codigo
        FROM seriales
        WHERE producto_id = ?
-         AND woocommerce_id = ?
          AND estado = 'disponible'
        ORDER BY fecha_ingreso ASC
        LIMIT 1
        FOR UPDATE`,
-      [producto_id, woocommerce_id]
+      [producto_id]
     );
 
     if (rows.length === 0) {
@@ -295,13 +294,14 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
 
     const serial = rows[0];
 
-    // 2. Marcar como asignado y guardar número de pedido
+    // 2. Marcar como asignado y actualizar el número de pedido y woocommerce_id
     await connection.query(
       `UPDATE seriales
        SET estado = 'asignado',
-           numero_pedido = ?
+           numero_pedido = ?,
+           woocommerce_id = ?
        WHERE id = ?`,
-      [numero_pedido, serial.id]
+      [numero_pedido, woocommerce_id, serial.id]
     );
 
     // 3. Confirmar la transacción
@@ -309,7 +309,10 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
 
     // 4. Retornar el serial ya reservado con su número de pedido
     return {
-      ...serial
+      ...serial,
+      estado: 'asignado',
+      numero_pedido,
+      woocommerce_id
     };
   } catch (error) {
     await connection.rollback();
@@ -318,6 +321,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
     connection.release();
   }
 };
+
 
 // models/serialesModel.js
 
