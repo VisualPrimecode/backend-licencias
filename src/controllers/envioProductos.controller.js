@@ -51,6 +51,7 @@ exports.getEnviosByIdwoo = async (req, res) => {
 
 // Crear un nuevo envío
 exports.createEnvio = async (req, res) => {
+  console.log('variables', req.body);
   try {
     const {
       id_usuario,
