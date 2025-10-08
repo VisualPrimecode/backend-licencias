@@ -460,151 +460,6 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
 
 
 */
-async function procesarProductos(
-  lineItems,
-  wooId,
-  empresa_id,
-  usuario_id,
-  numero_pedido,
-  registrarEnvioError,
-  currency
-) {
-  const productosProcesados = [];
-
-  // 1. Validar que haya productos
-  if (!Array.isArray(lineItems) || lineItems.length === 0) {
-    await registrarEnvioError({
-      empresa_id,
-      usuario_id,
-      numero_pedido,
-      motivo_error: 'SIN_PRODUCTOS',
-      detalles_error: 'El pedido no contiene productos en el payload recibido',
-    });
-    const err = new Error('El pedido no contiene productos.');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  // 2. Validar precios si corresponde
-  await validarPreciosProductos(
-    lineItems,
-    currency,
-    registrarEnvioError,
-    empresa_id,
-    usuario_id,
-    numero_pedido
-  );
-
-  try {
-    // 3. Iterar productos del pedido
-    for (const item of lineItems) {
-      const woo_producto_id = item.product_id;
-      const nombre_producto = item.name || null;
-      const cantidad = item.quantity || 1;
-
-      // 3.1 Verificar mapeo
-      const producto_id = await WooProductMapping.getProductoInternoId(
-        wooId,
-        woo_producto_id
-      );
-
-      if (!producto_id) {
-        await registrarEnvioError({
-          empresa_id,
-          usuario_id,
-          numero_pedido,
-          motivo_error: 'PRODUCTO_NO_MAPEADO',
-          detalles_error: `Woo product ID: ${woo_producto_id}`,
-        });
-        const err = new Error(
-          `Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`
-        );
-        err.statusCode = 404;
-        throw err;
-      }
-
-      // -------------------------------
-      // 🚩 Seriales de este producto
-      const serialesAsignados = [];
-
-      try {
-        // 3.2 Asignar seriales de este producto
-        for (let i = 0; i < cantidad; i++) {
-          const serial = await Serial.obtenerSerialDisponible2(
-            producto_id,
-            wooId,
-            numero_pedido
-          );
-
-          if (!serial || !serial.id || !serial.codigo) {
-            const err = new Error(
-              `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
-            );
-            err.statusCode = 404;
-            throw err;
-          }
-
-          // Guardamos temporalmente
-          serialesAsignados.push({
-            id_serial: serial.id,
-            codigo: serial.codigo,
-          });
-        }
-
-        console.log(
-          `✅ Seriales asignados para producto ${nombre_producto || producto_id}:`,
-          serialesAsignados
-        );
-
-        // 3.3 Obtener plantilla asociada
-        const plantilla = await getPlantillaConFallback(
-          producto_id,
-          wooId,
-          empresa_id
-        );
-
-        // 3.4 Confirmar el producto
-        productosProcesados.push({
-          producto_id,
-          woo_producto_id,
-          nombre_producto,
-          plantilla,
-          seriales: serialesAsignados,
-        });
-      } catch (errProducto) {
-        // ❌ Fallo durante la asignación de este producto
-        console.error(
-          `❌ Error asignando seriales para producto ${woo_producto_id}, iniciando rollback parcial...`,
-          errProducto
-        );
-
-        if (serialesAsignados.length > 0) {
-          await revertirSeriales(
-            [{ producto_id, seriales: serialesAsignados }],
-            wooId
-          );
-          console.log(
-            `↩️ Rollback completado para producto ${woo_producto_id}`
-          );
-        }
-
-        throw errProducto; // re-lanzamos para que se maneje más arriba
-      }
-    }
-
-    // 4. Si todos los productos fueron procesados
-    return productosProcesados;
-  } catch (error) {
-    // 🔄 Rollback global si ya había productos confirmados antes del error
-    if (productosProcesados.length > 0) {
-      console.log('⚠️ Error global, revirtiendo todos los seriales confirmados...');
-      await revertirSeriales(productosProcesados, wooId);
-      console.log('↩️ Rollback global completado');
-    }
-
-    throw error;
-  }
-}
 
 
 
@@ -612,118 +467,6 @@ async function procesarProductos(
 
 
 
-/*
-
-async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numero_pedido, registrarEnvioError) {
-  const productosProcesados = [];
-  const items = Array.isArray(lineItems) ? lineItems : [];
-
-  // 1. Validar que haya productos
-  if (items.length === 0) {
-    await registrarEnvioError({
-      empresa_id,
-      usuario_id,
-      numero_pedido,
-      motivo_error: 'SIN_PRODUCTOS'
-    });
-    const err = new Error('El pedido no contiene productos.');
-    err.statusCode = 400;
-    throw err;
-  }
-
-  try {
-    // 2. Procesar cada producto
-    for (const item of items) {
-      const woo_producto_id = item.product_id;
-      const nombre_producto = item.name || null;
-      const cantidad = item.quantity || 1;
-
-      // 2.1 Mapear producto interno
-      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
-      if (!producto_id) {
-        await registrarEnvioError({
-          empresa_id,
-          usuario_id,
-          numero_pedido,
-          motivo_error: 'PRODUCTO_NO_MAPEADO',
-          detalles_error: `Woo product ID: ${woo_producto_id}`
-        });
-        const err = new Error(`Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`);
-        err.statusCode = 404;
-        throw err;
-      }
-
-      // 2.2 Obtener seriales para cada unidad
-      const seriales = [];
-      for (let i = 0; i < cantidad; i++) {
-        const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
-        if (!serial || !serial.id || !serial.codigo) {
-          const err = new Error(
-            `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
-          );
-          err.statusCode = 404;
-          throw err;
-        }
-        seriales.push({ id_serial: serial.id, codigo: serial.codigo });
-      }
-      console.log(`✅ Seriales asignados para producto ${nombre_producto || producto_id}:`, seriales);
-
-      // 2.3 Obtener plantilla asociada
-      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
-
-      // 2.4 Agregar producto principal
-      productosProcesados.push({
-        producto_id,
-        woo_producto_id,
-        nombre_producto,
-        plantilla,
-        seriales
-      });
-
-     // 2.5 Procesar extras si existen en este item
-if (Array.isArray(item.extra_options) && item.extra_options.length > 0) {
-  try {
-    const productosExtra = await procesarProductosExtraAutomatico(
-      item.extra_options,
-      wooId,
-      empresa_id,
-      numero_pedido
-    );
-
-    if (productosExtra.length > 0) {
-      productosProcesados.push(...productosExtra);
-      console.log(`➕ Se agregaron ${productosExtra.length} productos extra del item ${nombre_producto}`);
-    }
-  } catch (extraError) {
-    console.error(`⚠️ Error al procesar productos extra del item ${nombre_producto}:`, extraError);
-
-    // registrar el error pero NO romper todo
-    await registrarEnvioError({
-      empresa_id,
-      usuario_id,
-      numero_pedido,
-      motivo_error: 'EXTRA_PRODUCTO_FALLIDO',
-      detalles_error: extraError.message || JSON.stringify(extraError)
-    });
-  }
-}
-
-    }
-
-    // 3. Devolver lista final
-    return productosProcesados;
-
-  } catch (error) {
-    console.error("❌ Error durante procesarProductos, iniciando rollback de seriales...", error);
-    try {
-      await revertirSeriales(productosProcesados, wooId);
-      console.log("↩️ Rollback de seriales completado correctamente");
-    } catch (rollbackError) {
-      console.error("⚠️ Error durante rollback de seriales:", rollbackError);
-    }
-    throw error; // re-lanza el error original
-  }
-}*/
 
 async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id, numero_pedido) {
   if (!Array.isArray(extraOptions)) return [];
@@ -785,6 +528,184 @@ async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id,
   }
 
   return productosExtrasProcesados;
+}
+async function procesarProductos(
+  lineItems,
+  wooId,
+  empresa_id,
+  usuario_id,
+  numero_pedido,
+  registrarEnvioError,
+  currency
+) {
+  const productosProcesados = [];
+  let productosExtrasProcesados = [];
+
+  // 1️⃣ Validar que haya productos
+  if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    await registrarEnvioError({
+      empresa_id,
+      usuario_id,
+      numero_pedido,
+      motivo_error: 'SIN_PRODUCTOS',
+      detalles_error: 'El pedido no contiene productos en el payload recibido',
+    });
+    const err = new Error('El pedido no contiene productos.');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // 2️⃣ Validar precios si corresponde
+  await validarPreciosProductos(
+    lineItems,
+    currency,
+    registrarEnvioError,
+    empresa_id,
+    usuario_id,
+    numero_pedido
+  );
+
+  try {
+    // 3️⃣ Iterar productos del pedido (productos principales)
+    for (const item of lineItems) {
+      const woo_producto_id = item.product_id;
+      const nombre_producto = item.name || null;
+      const cantidad = item.quantity || 1;
+
+      // 3.1 Verificar mapeo
+      const producto_id = await WooProductMapping.getProductoInternoId(
+        wooId,
+        woo_producto_id
+      );
+
+      if (!producto_id) {
+        await registrarEnvioError({
+          empresa_id,
+          usuario_id,
+          numero_pedido,
+          motivo_error: 'PRODUCTO_NO_MAPEADO',
+          detalles_error: `Woo product ID: ${woo_producto_id}`,
+        });
+        const err = new Error(
+          `Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`
+        );
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // -------------------------------
+      // 🚩 Seriales de este producto
+      const serialesAsignados = [];
+
+      try {
+        // 3.2 Asignar seriales del producto
+        for (let i = 0; i < cantidad; i++) {
+          const serial = await Serial.obtenerSerialDisponible2(
+            producto_id,
+            wooId,
+            numero_pedido
+          );
+
+          if (!serial || !serial.id || !serial.codigo) {
+            const err = new Error(
+              `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
+            );
+            err.statusCode = 404;
+            throw err;
+          }
+
+          serialesAsignados.push({
+            id_serial: serial.id,
+            codigo: serial.codigo,
+          });
+        }
+
+        console.log(
+          `✅ Seriales asignados para producto ${nombre_producto || producto_id}:`,
+          serialesAsignados
+        );
+
+        // 3.3 Obtener plantilla asociada
+        const plantilla = await getPlantillaConFallback(
+          producto_id,
+          wooId,
+          empresa_id
+        );
+
+        // 3.4 Confirmar producto
+        productosProcesados.push({
+          producto_id,
+          woo_producto_id,
+          nombre_producto,
+          plantilla,
+          seriales: serialesAsignados,
+        });
+      } catch (errProducto) {
+        // ❌ Fallo durante asignación de este producto
+        console.error(
+          `❌ Error asignando seriales para producto ${woo_producto_id}, iniciando rollback parcial...`,
+          errProducto
+        );
+
+        if (serialesAsignados.length > 0) {
+          await revertirSeriales(
+            [{ producto_id, seriales: serialesAsignados }],
+            wooId
+          );
+          console.log(
+            `↩️ Rollback completado para producto ${woo_producto_id}`
+          );
+        }
+
+        throw errProducto; // re-lanzamos para manejar más arriba
+      }
+    }
+
+    // 4️⃣ Procesar productos "Compra Con" (si existen en extraOptions/meta_data)
+    const extraOptions = lineItems
+      .flatMap(item => item.meta_data || [])
+      .filter(meta =>
+        typeof meta.key === 'string' &&
+        meta.key.toLowerCase().includes('extraoptions')
+      )
+      .flatMap(meta => {
+        try {
+          // algunos plugins guardan extraOptions como JSON
+          return typeof meta.value === 'string'
+            ? JSON.parse(meta.value)
+            : meta.value;
+        } catch {
+          return [];
+        }
+      });
+
+    if (extraOptions.length > 0) {
+      console.log(`🛒 Se encontraron ${extraOptions.length} opciones extra (Compra Con), procesando...`);
+      productosExtrasProcesados = await procesarProductosExtraAutomatico(
+        extraOptions,
+        wooId,
+        empresa_id,
+        numero_pedido
+      );
+    }
+
+    // 5️⃣ Combinar todos los productos (principales + extras)
+    const todosLosProductos = [...productosProcesados, ...productosExtrasProcesados];
+
+    console.log(`✅ Total productos procesados (incluyendo extras): ${todosLosProductos.length}`);
+    return todosLosProductos;
+
+  } catch (error) {
+    // 🔄 Rollback global (productos + extras)
+    const todosAsignados = [...productosProcesados, ...productosExtrasProcesados];
+    if (todosAsignados.length > 0) {
+      console.log('⚠️ Error global, revirtiendo todos los seriales (productos + extras)...');
+      await revertirSeriales(todosAsignados, wooId);
+      console.log('↩️ Rollback global completado');
+    }
+
+    throw error;
+  }
 }
 
 async function getPlantillaConFallback(producto_id, woo_id) {
@@ -877,231 +798,6 @@ async function validarPreciosProductos(lineItems, currency, registrarEnvioError,
   }
 }
 
-/*
-exports.pedidoCompletado = async (req, res) => {
-  console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
-  console.log('id woo', req.params.wooId);
-
-  const wooId = req.params.wooId;
-  const data = req.body;
-  console.log('data',data);
-  console.log('wooId',wooId);
-
-  try {
-    // ✅ Validar cuerpo del webhook
-      await validarPedidoWebhook(data, wooId, registrarEnvioError);
-      console.log('✅ Webhook validado correctamente');
-      console.log('data despues de validar',data);
-
-
-    // ✅ Obtener empresa y usuario asociado al WooCommerce
-  const empresaUsuario = await obtenerEmpresaYUsuario(wooId, data.number, registrarEnvioError);
-if (!empresaUsuario) {
-  return res.status(404).json({
-    mensaje: 'No se encontró empresa ni usuario para esta configuración WooCommerce'
-  });
-}
-
-    const empresa_id = empresaUsuario.id;
-    const usuario_id = empresaUsuario.usuario_id;
-
-    // ✅ Datos del cliente
-    const currency = data.currency || null;
-    console.log("moneda del pedido",currency);
-    const billing = data.billing || {};
-    const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-    const email_cliente = billing.email || null; // quitar hardcode
-  // const email_cliente = 'cl.rodriguezo@duocuc.cl'; 
-    const numero_pedido = data.number || data.id || null;
-    const fecha_envio = data.date_paid || new Date().toISOString();
-
-    // ✅ Prevenir duplicados
-    await verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, registrarEnvioError);
-
-
-    // ✅ Obtener nombre de empresa
-    const empresaName = await getEmpresaNameById(empresa_id);
-
-    // ✅ Procesar productos del pedido
-   const productosProcesados = await procesarProductos(
-  data.line_items,
-  wooId,
-  empresa_id,
-  
-  usuario_id,
-  numero_pedido,
-  registrarEnvioError,
-  currency
-);
-
-    // ✅ Construcción del objeto de envío
-    const envioData = {
-      empresa_id,
-      usuario_id,
-      nombre_cliente,
-      email_cliente,
-      numero_pedido,
-      woocommerce_id: wooId,
-      productos: productosProcesados,
-      empresaName,
-      estado: 'pendiente',
-      fecha_envio
-    };
-  const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
-if (!smtpConfig) {
-  return res.status(500).json({ error: 'No se encontró configuración SMTP activa' });
-}
-
-    // 📝 Crear envío en BD
-    let id;
-    try {
-      id = await Envio.createEnvio(envioData);
-    } catch (err) {
-      await registrarEnvioError({
-        empresa_id,
-        usuario_id,
-        numero_pedido,
-        motivo_error: 'DB_ERROR',
-        detalles_error: err.message
-      });
-      throw err; // se captura en el catch principal
-    }
-
-    // 📬 Obtener configuración SMTP
- 
-
-    // 📤 Encolar envío
-   await encolarEnvio(id, envioData, smtpConfig, empresa_id, usuario_id, numero_pedido, registrarEnvioError);
-
-    console.log('✅ Envío creado y encolado exitosamente:', id);
-    return res.status(200).json({ mensaje: 'Webhook procesado correctamente ✅', envioId: id });
-
-  } catch (error) {
-  // Caso especial: error esperado (payload vacío, test de WooCommerce, estado ignorado, etc.)
-  if (error.isIgnored) {
-    console.log(`ℹ Webhook ignorado: ${error.message}`);
-    return res.status(error.statusCode || 200).json({ mensaje: error.message });
-  }
-
-  // Caso normal: error real
-  await registrarEnvioError({
-    woo_config_id: wooId,
-    numero_pedido: data?.number || null,
-    motivo_error: 'ERROR_ENVIO_AUTOMATICO',
-    detalles_error: error.stack || error.message
-  });
-  
-  console.error('❌ Error al procesar webhook:', error);
-  return res.status(error.statusCode || 500).json({ mensaje: 'Error interno al procesar el webhook' });
-}
-
-};*/
-/*
-async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
-  console.log('⚙️ Procesando pedido de numero...', data);
-  console.log('de la tienda de wooId...', wooId);
-
-  try {
-    // 1. Validar datos básicos
-    //se debe actualizar este metodo para que soporte un pedido obtenido con el polling
-    await validarPedidoWebhook(data, wooId, registrarEnvioError);
-
-    // 2. Obtener empresa y usuario
-    const empresaUsuario = await obtenerEmpresaYUsuario(wooId, data.number, registrarEnvioError);
-    if (!empresaUsuario) {
-      throw new Error(`No se encontró empresa/usuario para wooId ${wooId}, pedido ${data.number}`);
-    }
-    const empresa_id = empresaUsuario.id;
-    const usuario_id = empresaUsuario.usuario_id;
-
-    // 3. Datos del cliente
-    const billing = data.billing || {};
-    const nombre_cliente = `${billing.first_name || ''} ${billing.last_name || ''}`.trim();
-    const email_cliente = billing.email || null;
-    const numero_pedido = data.number || data.id || null;
-    const fecha_envio = data.date_paid || new Date().toISOString();
-
-    // 4. Prevenir duplicados
-    await verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, registrarEnvioError);
-
-    // 5. Nombre de empresa
-    const empresaName = await getEmpresaNameById(empresa_id);
-
-    // 6. Procesar productos
-    const productosRaw = data.line_items || data.products || [];
-
-// Validación: no hay productos
-if (!productosRaw.length) {
-  await registrarEnvioError({
-    woo_config_id: wooId,
-    numero_pedido,
-    motivo_error: 'SIN_PRODUCTOS',
-    detalles_error: 'El pedido no contiene productos en el payload recibido'
-  });
-
-  const err = new Error(`Pedido ${numero_pedido} sin productos`);
-  err.statusCode = 400;
-  throw err;
-}
-
-// Pasar a procesarProductos como antes
-const productosProcesados = await procesarProductos(
-  productosRaw,
-  wooId,
-  empresa_id,
-  usuario_id,
-  numero_pedido,
-  registrarEnvioError
-);
-
-    // 7. Construcción del objeto envío
-   function formatFechaMySQL(date = new Date()) {
-  return date.toISOString().slice(0, 19).replace('T', ' ');
-}
-
-// Ejemplo de uso
-const envioData = {
-  empresa_id,
-  usuario_id,
-  nombre_cliente,
-  email_cliente,
-  numero_pedido,
-  estado: 'pendiente',
-  fecha_envio: formatFechaMySQL(), // 👉 aquí ya queda '2025-09-17 18:08:10'
-  woo_id: wooId,
-  woo_idproduct: null
-};
-
-
-    // 8. Configuración SMTP
-    const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
-    if (!smtpConfig) {
-      throw new Error('No se encontró configuración SMTP activa');
-    }
-    console.log('datos obtenidos de cada paso, empresa y usuario, datos cliente, productos procesados, envio data y smtp config',empresa_id,usuario_id,nombre_cliente,email_cliente,numero_pedido)
-
-    // 9. Registrar en BD
-    const id = await Envio.createEnvio(envioData);
-
-    // 10. Encolar para envío
-    await encolarEnvio(id, envioData, smtpConfig, empresa_id, usuario_id, numero_pedido, registrarEnvioError);
-
-    console.log(`✅ Pedido ${numero_pedido} procesado y encolado exitosamente`);
-
-    return id;
-
-  } catch (error) {
-    // Log de error en BD
-    await registrarEnvioError({
-      woo_config_id: wooId,
-      numero_pedido: data?.number || null,
-      motivo_error: 'ERROR_PROCESAR_PEDIDO',
-      detalles_error: error.stack || error.message
-    });
-    console.error(`❌ Error procesando pedido ${data.number}:`, error);
-    throw error;
-  }
-}*/
 const PedidosLock = require('../models/pedidosLock.model');
 
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
