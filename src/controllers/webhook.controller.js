@@ -463,7 +463,10 @@ async function procesarProductos(lineItems, wooId, empresa_id, usuario_id, numer
 
 
 
-
+const mapaExtrasPersonalizado = {
+  "office 2024 pro plus": 329,
+  "🔥 selecciona acá tu antivirus mcafee antivirus plus 1 año / 1 dispositivo $6.990": 339
+};
 
 
 
