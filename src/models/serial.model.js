@@ -271,6 +271,8 @@ const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad,
 
 
 const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedido) => {
+  console.log("entro a obtener serial disponible 2");
+  console.log("producto_id:", producto_id, "woocommerce_id:", woocommerce_id, "numero_pedido:", numero_pedido);
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
