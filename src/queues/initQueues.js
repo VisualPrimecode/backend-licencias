@@ -13,12 +13,12 @@ wooPollingQueue.process(async () => {
   try {
     console.log('📡 Ejecutando job de polling: llamando al endpoint /api/polling/woo');
 //en local
-
+/*
     // Llamada al endpoint del servidor (ajusta URL según tu despliegue)
     await axios.post(`http://localhost:3000/api/webhooks-crud/woo/polling`);
-/*
-    await axios.post(`https://backend-licencias-node-mysql.onrender.com/api/webhooks-crud/woo/polling`);
 */
+    await axios.post(`https://backend-licencias-node-mysql.onrender.com/api/webhooks-crud/woo/polling`);
+
     console.log('✅ Polling ejecutado correctamente vía API');
   } catch (error) {
     console.error('❌ Error ejecutando polling vía API:', error.message);
