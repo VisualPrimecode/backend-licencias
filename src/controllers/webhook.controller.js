@@ -111,8 +111,65 @@ exports.createWebhook = async (req, res) => {
     return res.status(500).json({ error: 'Error interno al crear webhook' });
   }
 };
+exports.pauseAllWebhooks = async (req, res) => {
+  console.log("🔄 Iniciando proceso para pausar todos los webhooks...");
+
+  try {
+    // 1️⃣ Obtener todas las tiendas activas
+    const tiendas = await WooConfig.getAllConfigs();
+    if (!tiendas || tiendas.length === 0) {
+      return res.status(404).json({ error: "No se encontraron tiendas configuradas." });
+    }
+
+    let resultados = [];
+
+    // 2️⃣ Iterar por cada tienda
+    for (const tienda of tiendas) {
+      console.log(`📦 Tienda: ${tienda.nombre_alias} (config_id=${tienda.id})`);
+
+      // Obtener webhooks locales de esta tienda
+      const webhooks = await Webhook.getWebhooksByConfigId(tienda.id);
+      if (!webhooks || webhooks.length === 0) {
+        console.log(`⚠️ No hay webhooks en la tienda ${tienda.nombre_alias}`);
+        continue;
+      }
+
+      // 3️⃣ Pausar todos los webhooks en paralelo dentro de la tienda
+      const resultadosTienda = await Promise.allSettled(
+        webhooks.map(async (wh) => {
+          const result = await Webhook.syncWebhookStatus(wh.id, "pausado", tienda.id);
+          return {
+            tienda: tienda.nombre_alias,
+            webhook_local_id: wh.id,
+            woo_id: wh.woo_id,
+            status: result.ok ? "✅ pausado" : "❌ error",
+            detalle: result.error || null
+          };
+        })
+      );
+
+      resultados.push(...resultadosTienda.map(r => r.value || r.reason));
+    }
+
+    // 4️⃣ Resumen global
+    const total = resultados.length;
+    const exitosos = resultados.filter(r => r.status === "✅ pausado").length;
+    const fallidos = resultados.filter(r => r.status === "❌ error").length;
+
+    return res.status(200).json({
+      mensaje: "✅ Proceso de pausa de webhooks completado",
+      resumen: { total, exitosos, fallidos },
+      detalles: resultados
+    });
+
+  } catch (error) {
+    console.error("💥 Error global en pauseAllWebhooks:", error);
+    return res.status(500).json({ error: "Error interno al pausar webhooks" });
+  }
+};
 
 exports.updateWebhook = async (req, res) => {
+  console.log("entro aca update");
   try {
     const { id } = req.params;
     const {
@@ -123,7 +180,7 @@ exports.updateWebhook = async (req, res) => {
       secreto,
       version_api
     } = req.body;
-
+    console.log("datos req update",req.body);
     // Validación mínima
     if (!nombre || !tema || !url_entrega) {
       return res.status(400).json({ error: 'Faltan campos requeridos: nombre, tema, url_entrega' });
@@ -625,32 +682,25 @@ async function procesarProductos(
     }
 
     // 4️⃣ Procesar productos "Compra Con" (si existen en extraOptions/meta_data)
-    const extraOptions = lineItems
-      .flatMap(item => item.meta_data || [])
-      .filter(meta =>
-        typeof meta.key === 'string' &&
-        meta.key.toLowerCase().includes('extraoptions')
-      )
-      .flatMap(meta => {
-        try {
-          // algunos plugins guardan extraOptions como JSON
-          return typeof meta.value === 'string'
-            ? JSON.parse(meta.value)
-            : meta.value;
-        } catch {
-          return [];
-        }
-      });
+    // 4️⃣ Procesar productos "Compra Con" (ahora vienen dentro de item.extra_options)
+const extraOptions = lineItems
+  .flatMap(item => item.extra_options || [])
+  .filter(opt =>
+    typeof opt.name === 'string' &&
+    opt.name.toLowerCase().includes('compra con')
+  );
+
+if (extraOptions.length > 0) {
+  console.log(`🛒 Se encontraron ${extraOptions.length} opciones extra (Compra Con) en productos, procesando...`);
+  productosExtrasProcesados = await procesarProductosExtraAutomatico(
+    extraOptions,
+    wooId,
+    empresa_id,
+    numero_pedido
+  );
+}
+
       
-    if (extraOptions.length > 0) {
-      console.log(`🛒 Se encontraron ${extraOptions.length} opciones extra (Compra Con), procesando...`);
-      productosExtrasProcesados = await procesarProductosExtraAutomatico(
-        extraOptions,
-        wooId,
-        empresa_id,
-        numero_pedido
-      );
-    }
 
     // 5️⃣ Combinar todos los productos (principales + extras)
     const todosLosProductos = [...productosProcesados, ...productosExtrasProcesados];
