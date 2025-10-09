@@ -396,66 +396,102 @@ const mapaExtrasPersonalizado = {
 
 
 async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id, numero_pedido) {
-  if (!Array.isArray(extraOptions)) return [];
+  console.log("🔍 Iniciando procesamiento de productos extra automáticos...");
+  console.log("📦 Extra options recibidos:", JSON.stringify(extraOptions, null, 2));
+
+  if (!Array.isArray(extraOptions)) {
+    console.warn("⚠️ extraOptions no es un array o está vacío, no se procesarán productos extra.");
+    return [];
+  }
 
   const productosExtrasProcesados = [];
 
-  // 🔹 Filtrar extras tipo "Compra Con"
+  // 🔹 Filtrar solo las opciones tipo "Compra con"
   const extrasCompraCon = extraOptions.filter(opt =>
     typeof opt.name === 'string' &&
     opt.name.toLowerCase().includes('compra con')
   );
 
+  console.log(`🧩 Extras tipo 'compra con' detectados: ${extrasCompraCon.length}`);
+
   for (const extra of extrasCompraCon) {
-    const nombreExtraProducto = extra.value?.trim();
-    if (!nombreExtraProducto) continue;
+    try {
+      console.log("➡️ Procesando extra:", JSON.stringify(extra, null, 2));
 
-    // 1. Intentar mapear el producto interno
-    let producto_id = mapaExtrasPersonalizado[nombreExtraProducto.toLowerCase()];
-    if (!producto_id) {
-      try {
-        producto_id = await getProductoInternoByNombreYWooId(nombreExtraProducto, wooId);
-      } catch (err) {
-        console.error(`⚠️ Error buscando ID interno para producto extra "${nombreExtraProducto}":`, err.message);
-        continue; // si falla la búsqueda → omitimos el producto extra
+      const nombreExtraProducto = extra.value?.trim();
+      if (!nombreExtraProducto) {
+        console.warn("⚠️ Extra sin nombre válido, se omite:", extra);
+        continue;
       }
+
+      console.log(`🔎 Buscando ID interno para producto extra: "${nombreExtraProducto}"`);
+
+      // 1️⃣ Intentar mapear producto interno exactamente como viene
+      let producto_id = mapaExtrasPersonalizado[nombreExtraProducto.toLowerCase()];
+      console.log("🗺️ Resultado mapa personalizado:", producto_id);
+
+      if (!producto_id) {
+        try {
+          producto_id = await getProductoInternoByNombreYWooId(nombreExtraProducto, wooId);
+          console.log("🔁 ID interno obtenido desde base:", producto_id);
+        } catch (err) {
+          console.error(`❌ Error al buscar producto extra "${nombreExtraProducto}" en BD:`, err.message);
+          continue;
+        }
+      }
+
+      if (!producto_id) {
+        console.warn(`⚠️ Producto extra no reconocido: "${nombreExtraProducto}", se omite.`);
+        continue;
+      }
+
+      // 2️⃣ Asignar serial
+      console.log(`🎯 Asignando serial para producto extra ID interno: ${producto_id}`);
+      const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
+      console.log("📟 Resultado de obtenerSerialDisponible2:", serial);
+
+      if (!serial || !serial.id || !serial.codigo) {
+        console.error(`❌ No hay serial válido para el producto extra "${nombreExtraProducto}"`);
+        const err = new Error(`No hay serial válido para el producto extra "${nombreExtraProducto}"`);
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // 3️⃣ Obtener plantilla
+      console.log(`📄 Buscando plantilla para producto extra ${producto_id} (wooId: ${wooId})`);
+      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+      console.log("🧩 Plantilla encontrada:", plantilla ? "✅ Sí" : "❌ No");
+
+      if (!plantilla) {
+        const err = new Error(`No se encontró plantilla para el producto extra "${nombreExtraProducto}"`);
+        err.statusCode = 404;
+        throw err;
+      }
+
+      // 4️⃣ Agregar producto extra procesado
+      const productoProcesado = {
+        producto_id,
+        woo_producto_id: null,
+        nombre_producto: nombreExtraProducto,
+        plantilla,
+        seriales: [{ id_serial: serial.id, codigo: serial.codigo }]
+      };
+
+      productosExtrasProcesados.push(productoProcesado);
+
+      console.log(`🛒 Producto extra procesado correctamente: "${nombreExtraProducto}"`);
+      console.log("📋 Detalle del producto extra procesado:", JSON.stringify(productoProcesado, null, 2));
+    } catch (errExtra) {
+      console.error("❌ Error procesando un producto extra:", errExtra);
     }
-
-    if (!producto_id) {
-      console.warn(`⚠️ Producto extra no reconocido: "${nombreExtraProducto}"`);
-      continue;
-    }
-
-    // 2. Asignar serial nuevo (en automático siempre es flujo "nuevo")
-    const serial = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
-    if (!serial || !serial.id || !serial.codigo) {
-      const err = new Error(`No hay serial válido para el producto extra "${nombreExtraProducto}"`);
-      err.statusCode = 404;
-      throw err;
-    }
-
-    // 3. Obtener plantilla asociada
-    const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
-    if (!plantilla) {
-      const err = new Error(`No se encontró plantilla para el producto extra "${nombreExtraProducto}"`);
-      err.statusCode = 404;
-      throw err;
-    }
-
-    // 4. Construir producto extra procesado
-    productosExtrasProcesados.push({
-      producto_id,
-      woo_producto_id: null, // extras no vienen de Woo directamente
-      nombre_producto: nombreExtraProducto,
-      plantilla,
-      seriales: [{ id_serial: serial.id, codigo: serial.codigo }]
-    });
-
-    console.log(`🛒 Producto extra procesado automáticamente: "${nombreExtraProducto}" con serial ${serial.codigo}`);
   }
+
+  console.log(`✅ Finalizado procesamiento de productos extra. Total procesados: ${productosExtrasProcesados.length}`);
+  console.log("📦 Productos extras procesados:", JSON.stringify(productosExtrasProcesados, null, 2));
 
   return productosExtrasProcesados;
 }
+
 async function procesarProductos(
   lineItems,
   wooId,
@@ -465,7 +501,6 @@ async function procesarProductos(
   registrarEnvioError,
   currency
 ) {
-  console.log('line items recibidos para procesar:', lineItems);
   const productosProcesados = [];
   let productosExtrasProcesados = [];
 
@@ -606,7 +641,7 @@ async function procesarProductos(
           return [];
         }
       });
-      console.log("extraOptions encontrados:", extraOptions);
+      
     if (extraOptions.length > 0) {
       console.log(`🛒 Se encontraron ${extraOptions.length} opciones extra (Compra Con), procesando...`);
       productosExtrasProcesados = await procesarProductosExtraAutomatico(
@@ -891,6 +926,7 @@ exports.pedidoCompletado = async (req, res) => {
 
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
+
 
   try {
     
