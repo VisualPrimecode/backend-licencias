@@ -133,7 +133,7 @@ exports.pauseAllWebhooks = async (req, res) => {
         console.log(`⚠️ No hay webhooks en la tienda ${tienda.nombre_alias}`);
         continue;
       }
-
+      console.log(`🔍 Webhooks encontrados: ${webhooks.length}`);
       // 3️⃣ Pausar todos los webhooks en paralelo dentro de la tienda
       const resultadosTienda = await Promise.allSettled(
         webhooks.map(async (wh) => {
@@ -167,6 +167,63 @@ exports.pauseAllWebhooks = async (req, res) => {
     return res.status(500).json({ error: "Error interno al pausar webhooks" });
   }
 };
+exports.activateAllWebhooks = async (req, res) => {
+  console.log("🚀 Iniciando proceso para activar todos los webhooks...");
+
+  try {
+    // 1️⃣ Obtener todas las tiendas activas
+    const tiendas = await WooConfig.getAllConfigs();
+    if (!tiendas || tiendas.length === 0) {
+      return res.status(404).json({ error: "No se encontraron tiendas configuradas." });
+    }
+
+    let resultados = [];
+
+    // 2️⃣ Iterar por cada tienda
+    for (const tienda of tiendas) {
+      console.log(`📦 Tienda: ${tienda.nombre_alias} (config_id=${tienda.id})`);
+
+      const webhooks = await Webhook.getWebhooksByConfigId(tienda.id);
+      if (!webhooks || webhooks.length === 0) {
+        console.log(`⚠️ No hay webhooks en la tienda ${tienda.nombre_alias}`);
+        continue;
+      }
+      console.log(`🔍 Webhooks encontrados: ${webhooks.length}`);
+
+      // 3️⃣ Activar todos los webhooks en paralelo dentro de la tienda
+      const resultadosTienda = await Promise.allSettled(
+        webhooks.map(async (wh) => {
+          const result = await Webhook.syncWebhookStatus(wh.id, "activo", tienda.id);
+          return {
+            tienda: tienda.nombre_alias,
+            webhook_local_id: wh.id,
+            woo_id: wh.woo_id,
+            status: result.ok ? "✅ activado" : "❌ error",
+            detalle: result.error || null
+          };
+        })
+      );
+
+      resultados.push(...resultadosTienda.map(r => r.value || r.reason));
+    }
+
+    // 4️⃣ Resumen global
+    const total = resultados.length;
+    const exitosos = resultados.filter(r => r.status === "✅ activado").length;
+    const fallidos = resultados.filter(r => r.status === "❌ error").length;
+
+    return res.status(200).json({
+      mensaje: "✅ Proceso de activación de webhooks completado",
+      resumen: { total, exitosos, fallidos },
+      detalles: resultados
+    });
+
+  } catch (error) {
+    console.error("💥 Error global en activateAllWebhooks:", error);
+    return res.status(500).json({ error: "Error interno al activar webhooks" });
+  }
+};
+
 
 exports.updateWebhook = async (req, res) => {
   console.log("entro aca update");
@@ -681,24 +738,63 @@ async function procesarProductos(
       }
     }
 
-    // 4️⃣ Procesar productos "Compra Con" (si existen en extraOptions/meta_data)
     // 4️⃣ Procesar productos "Compra Con" (ahora vienen dentro de item.extra_options)
-const extraOptions = lineItems
-  .flatMap(item => item.extra_options || [])
-  .filter(opt =>
-    typeof opt.name === 'string' &&
-    opt.name.toLowerCase().includes('compra con')
-  );
+// 4️⃣ Procesar productos "Compra Con" (ahora vienen dentro de item.extra_options)
+let extraOptions = [];
+try {
+  console.log("🧩 Iniciando lectura de extra_options en los lineItems...");
+
+  // Validar que lineItems sea un array
+  if (!Array.isArray(lineItems)) {
+    console.warn("⚠️ lineItems no es un array, valor recibido:", lineItems);
+  } else {
+    for (const [index, item] of lineItems.entries()) {
+      console.log(`📦 Producto [${index}] -> ID: ${item.product_id}, Nombre: ${item.name}`);
+
+      // Validar estructura de extra_options
+      if (!Array.isArray(item.extra_options)) {
+        console.log(`   ⚠️ item.extra_options no es array (tipo: ${typeof item.extra_options})`, item.extra_options);
+        continue;
+      }
+
+      console.log(`   🔍 Extra options detectados (${item.extra_options.length}):`, item.extra_options);
+
+      // Agregamos los que contienen "Compra Con"
+      const extrasCompraCon = item.extra_options.filter(opt =>
+        typeof opt.name === 'string' &&
+        opt.name.toLowerCase().includes('compra con')
+      );
+
+      if (extrasCompraCon.length > 0) {
+        console.log(`   🛒 ${extrasCompraCon.length} extras tipo "Compra Con" encontrados en ${item.name}`);
+        extraOptions.push(...extrasCompraCon);
+      } else {
+        console.log(`   ℹ️ Sin extras "Compra Con" en ${item.name}`);
+      }
+    }
+  }
+} catch (errExtra) {
+  console.error("❌ Error al inspeccionar extra_options:", errExtra);
+  extraOptions = []; // Evitamos romper el flujo
+}
 
 if (extraOptions.length > 0) {
-  console.log(`🛒 Se encontraron ${extraOptions.length} opciones extra (Compra Con) en productos, procesando...`);
-  productosExtrasProcesados = await procesarProductosExtraAutomatico(
-    extraOptions,
-    wooId,
-    empresa_id,
-    numero_pedido
-  );
+  console.log(`🛒 Se encontraron ${extraOptions.length} productos extra (Compra Con), procesando...`);
+  try {
+    productosExtrasProcesados = await procesarProductosExtraAutomatico(
+      extraOptions,
+      wooId,
+      empresa_id,
+      numero_pedido
+    );
+  } catch (errProcesarExtras) {
+    console.error("❌ Error procesando productos extra (Compra Con):", errProcesarExtras);
+    throw errProcesarExtras;
+  }
+} else {
+  console.log("ℹ️ No se encontraron extras 'Compra Con' en este pedido.");
 }
+
 
       
 
