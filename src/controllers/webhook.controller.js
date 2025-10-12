@@ -9,10 +9,10 @@ const envioQueue = require('../queues/envioQueue');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const Plantilla = require('../models/plantilla.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
-
-
 const { getEmpresaNameById } = require('../models/empresa.model');
 
+
+const { updatePollingStatus } = require('../models/pollingControl'); // ✅ nuevo import
 
 // Obtener todos los webhooks
 exports.getAllWebhooks = async (req, res) => {
@@ -111,67 +111,27 @@ exports.createWebhook = async (req, res) => {
     return res.status(500).json({ error: 'Error interno al crear webhook' });
   }
 };
-exports.pauseAllWebhooks = async (req, res) => {
-  console.log("🔄 Iniciando proceso para pausar todos los webhooks...");
 
-  try {
-    // 1️⃣ Obtener todas las tiendas activas
-    const tiendas = await WooConfig.getAllConfigs();
-    if (!tiendas || tiendas.length === 0) {
-      return res.status(404).json({ error: "No se encontraron tiendas configuradas." });
-    }
 
-    let resultados = [];
 
-    // 2️⃣ Iterar por cada tienda
-    for (const tienda of tiendas) {
-      console.log(`📦 Tienda: ${tienda.nombre_alias} (config_id=${tienda.id})`);
+exports.toggleAllWebhooks = async (req, res) => {
+  const { action } = req.params;
+  const validActions = { activar: 'activo', pausar: 'pausado' };
+  console.log("accion recibida",action);
 
-      // Obtener webhooks locales de esta tienda
-      const webhooks = await Webhook.getWebhooksByConfigId(tienda.id);
-      if (!webhooks || webhooks.length === 0) {
-        console.log(`⚠️ No hay webhooks en la tienda ${tienda.nombre_alias}`);
-        continue;
-      }
-      console.log(`🔍 Webhooks encontrados: ${webhooks.length}`);
-      // 3️⃣ Pausar todos los webhooks en paralelo dentro de la tienda
-      const resultadosTienda = await Promise.allSettled(
-        webhooks.map(async (wh) => {
-          const result = await Webhook.syncWebhookStatus(wh.id, "pausado", tienda.id);
-          return {
-            tienda: tienda.nombre_alias,
-            webhook_local_id: wh.id,
-            woo_id: wh.woo_id,
-            status: result.ok ? "✅ pausado" : "❌ error",
-            detalle: result.error || null
-          };
-        })
-      );
 
-      resultados.push(...resultadosTienda.map(r => r.value || r.reason));
-    }
-
-    // 4️⃣ Resumen global
-    const total = resultados.length;
-    const exitosos = resultados.filter(r => r.status === "✅ pausado").length;
-    const fallidos = resultados.filter(r => r.status === "❌ error").length;
-
-    return res.status(200).json({
-      mensaje: "✅ Proceso de pausa de webhooks completado",
-      resumen: { total, exitosos, fallidos },
-      detalles: resultados
-    });
-
-  } catch (error) {
-    console.error("💥 Error global en pauseAllWebhooks:", error);
-    return res.status(500).json({ error: "Error interno al pausar webhooks" });
+  if (!validActions[action]) {
+    return res.status(400).json({ error: "Acción no válida. Usa 'activar' o 'pausar'." });
   }
-};
-exports.activateAllWebhooks = async (req, res) => {
-  console.log("🚀 Iniciando proceso para activar todos los webhooks...");
+
+  const estadoObjetivo = validActions[action];
+  const activar = action === 'activar';
+  const emoji = activar ? '🚀' : '🔄';
+
+  console.log(`${emoji} Iniciando proceso para ${action} todos los sistemas (webhooks + polling)...`);
 
   try {
-    // 1️⃣ Obtener todas las tiendas activas
+    // 1️⃣ Obtener todas las tiendas
     const tiendas = await WooConfig.getAllConfigs();
     if (!tiendas || tiendas.length === 0) {
       return res.status(404).json({ error: "No se encontraron tiendas configuradas." });
@@ -179,7 +139,7 @@ exports.activateAllWebhooks = async (req, res) => {
 
     let resultados = [];
 
-    // 2️⃣ Iterar por cada tienda
+    // 2️⃣ Iterar por cada tienda y actualizar sus webhooks
     for (const tienda of tiendas) {
       console.log(`📦 Tienda: ${tienda.nombre_alias} (config_id=${tienda.id})`);
 
@@ -190,15 +150,14 @@ exports.activateAllWebhooks = async (req, res) => {
       }
       console.log(`🔍 Webhooks encontrados: ${webhooks.length}`);
 
-      // 3️⃣ Activar todos los webhooks en paralelo dentro de la tienda
       const resultadosTienda = await Promise.allSettled(
         webhooks.map(async (wh) => {
-          const result = await Webhook.syncWebhookStatus(wh.id, "activo", tienda.id);
+          const result = await Webhook.syncWebhookStatus(wh.id, estadoObjetivo, tienda.id);
           return {
             tienda: tienda.nombre_alias,
             webhook_local_id: wh.id,
             woo_id: wh.woo_id,
-            status: result.ok ? "✅ activado" : "❌ error",
+            status: result.ok ? `✅ ${estadoObjetivo}` : "❌ error",
             detalle: result.error || null
           };
         })
@@ -207,22 +166,44 @@ exports.activateAllWebhooks = async (req, res) => {
       resultados.push(...resultadosTienda.map(r => r.value || r.reason));
     }
 
-    // 4️⃣ Resumen global
+    // 3️⃣ Resumen de webhooks
     const total = resultados.length;
-    const exitosos = resultados.filter(r => r.status === "✅ activado").length;
-    const fallidos = resultados.filter(r => r.status === "❌ error").length;
+   
+    // 4️⃣ Actualizar también el estado del polling
+    let pollingResultado;
+    try {
+      await updatePollingStatus(activar, 'admin');
+      pollingResultado = {
+        nuevo_estado: activar ? 'ACTIVO' : 'PAUSADO',
+        resultado: '✅ actualizado'
+      };
+      console.log(`🛰️ Polling actualizado a estado: ${pollingResultado.nuevo_estado}`);
+    } catch (pollingError) {
+      console.error('💥 Error al actualizar estado de polling:', pollingError);
+      pollingResultado = {
+        nuevo_estado: activar ? 'ACTIVO' : 'PAUSADO',
+        resultado: '❌ error',
+        detalle: pollingError.message || pollingError
+      };
+    }
 
+    // 5️⃣ Respuesta global
     return res.status(200).json({
-      mensaje: "✅ Proceso de activación de webhooks completado",
-      resumen: { total, exitosos, fallidos },
-      detalles: resultados
+      mensaje: `✅ Proceso de ${action} completado`,
+      resumen: {
+        webhooks: { total },
+        polling: pollingResultado
+      },
+      detalles_webhooks: resultados
     });
 
   } catch (error) {
-    console.error("💥 Error global en activateAllWebhooks:", error);
-    return res.status(500).json({ error: "Error interno al activar webhooks" });
+    console.error(`💥 Error global en ${action}AllWebhooks:`, error);
+    return res.status(500).json({ error: `Error interno al ${action} webhooks y polling` });
   }
 };
+
+
 
 
 exports.updateWebhook = async (req, res) => {
@@ -760,6 +741,8 @@ try {
       console.log(`   🔍 Extra options detectados (${item.extra_options.length}):`, item.extra_options);
 
       // Agregamos los que contienen "Compra Con"
+      //Esta filtro es clave para identificar los productos extra, basicamente busca en el nombre la frase "compra con" en
+      //los datos del extra_options que vienen en los productos del pedido
       const extrasCompraCon = item.extra_options.filter(opt =>
         typeof opt.name === 'string' &&
         opt.name.toLowerCase().includes('compra con')

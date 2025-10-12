@@ -2,33 +2,27 @@ const express = require('express');
 const router = express.Router();
 const webhookController = require('../controllers/webhook.controller');
 
+// 🔹 1️⃣ RUTAS ESPECÍFICAS / FUNCIONALES
 router.post('/woo/polling', webhookController.ejecutarPolling);
+router.post('/toggle-webhooks/:action', webhookController.toggleAllWebhooks);
 
-
-// Obtener todos los webhooks
-router.get('/', webhookController.getAllWebhooks);
-
-// Obtener un webhook por ID
+// 🔹 2️⃣ RUTAS DE WEBHOOKS POR IDENTIFICADOR / CONFIG
 router.get('/webhooksXid/:id', webhookController.getWebhookById);
-
-// Obtener todos los webhooks de una configuración específica
 router.get('/config/:configId', webhookController.getWebhooksByConfigId);
 
-// Crear un nuevo webhook
+// 🔹 3️⃣ CRUD PRINCIPAL
+router.get('/', webhookController.getAllWebhooks);
 router.post('/', webhookController.createWebhook);
-
-// Actualizar un webhook por ID
 router.put('/:id', webhookController.updateWebhook);
-
-// Eliminar un webhook por ID
 router.delete('/:id', webhookController.deleteWebhook);
 
-
+// 🔹 4️⃣ RUTA WOO SPECÍFICA
 router.post(
   '/woocommerce/:wooId/pedido-completado',
   webhookController.pedidoCompletado
 );
-//woocomerceendpont crud
+
+// 🔹 5️⃣ CRUD ALTERNATIVO / LEGACY (mantenlo al final)
 router.get('/webhooks', webhookController.getAll);
 router.get('/webhook/:id', webhookController.getById);
 router.post('/webhook', webhookController.create);

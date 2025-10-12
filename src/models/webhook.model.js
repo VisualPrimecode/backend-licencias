@@ -64,6 +64,27 @@ const deleteWebhook = async (id) => {
 // Este modelo maneja las operaciones CRUD para los webhooks de WooCommerce
 const WooCommerceRestApi = require("@woocommerce/woocommerce-rest-api").default;
 
+// webhook_model.js
+async function syncWebhookStatus(id, estado, configId) {
+  console.log("Sincronizando estado del webhook en WooCommerce para id:", id, "estado:", estado, "configId:", configId);
+  const estadoWooMap = {
+    activo: 'active',
+    inactivo: 'disabled',
+    pausado: 'paused'
+  };
+  const estadoWoo = estadoWooMap[estado];
+  
+  const localWebhook = await getWebhookById(id);
+  if (!localWebhook || !localWebhook.woo_id) throw new Error("Webhook no encontrado");
+
+  await updateWebhookInWoo({
+    id: localWebhook.woo_id,
+    data: { status: estadoWoo },
+    configId: configId || localWebhook.config_id
+  });
+
+  await updateWebhook(id, { estado });
+}
 
 /**
  * Crea y devuelve una instancia de WooCommerceRestApi basada en el ID de configuración (woocommerce_api_config.id)
@@ -220,5 +241,6 @@ module.exports = {
   updateWebhookInWoo,
   createWebhookInWoo,
   getWebhooksFromWoo,
-  getWooApiInstanceByConfigId
+  getWooApiInstanceByConfigId,
+  syncWebhookStatus
 };

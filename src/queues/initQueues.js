@@ -8,10 +8,14 @@ const productosEnvioProcessor = require('../workers/envioProductosProcessor');
 const wooPollingQueue = require('./wooPollingQueue');
 const axios = require('axios');
 
+const { validarEstadoPolling } = require('../utils/validarPolling');
+
 // ⚡ Cada job del polling simplemente hace una petición al servidor
 wooPollingQueue.process(async () => {
   try {
     console.log('📡 Ejecutando job de polling: llamando al endpoint /api/polling/woo');
+        await validarEstadoPolling();
+
 //en local
 /*
     // Llamada al endpoint del servidor (ajusta URL según tu despliegue)
