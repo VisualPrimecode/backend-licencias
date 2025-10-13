@@ -724,7 +724,7 @@ async function procesarProductos(
 let extraOptions = [];
 try {
   console.log("🧩 Iniciando lectura de extra_options en los lineItems...");
-
+  console.log("lineItems recibidos:", JSON.stringify(lineItems, null, 2));
   // Validar que lineItems sea un array
   if (!Array.isArray(lineItems)) {
     console.warn("⚠️ lineItems no es un array, valor recibido:", lineItems);
@@ -743,6 +743,7 @@ try {
       // Agregamos los que contienen "Compra Con"
       //Esta filtro es clave para identificar los productos extra, basicamente busca en el nombre la frase "compra con" en
       //los datos del extra_options que vienen en los productos del pedido
+      console.log("item.extra_options",item.extra_options);
       const extrasCompraCon = item.extra_options.filter(opt =>
         typeof opt.name === 'string' &&
         opt.name.toLowerCase().includes('compra con')
@@ -1128,6 +1129,9 @@ const tiendas = [
     return res.status(500).json({ mensaje: 'Error interno en el polling' });
   }
 };
+// controllers/webhook_controller.js
+
+
 
 
 //controladro woocomerce wehbook crud
