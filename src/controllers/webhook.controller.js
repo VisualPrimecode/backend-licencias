@@ -719,52 +719,70 @@ async function procesarProductos(
       }
     }
 
-    // 4️⃣ Procesar productos "Compra Con" (ahora vienen dentro de item.extra_options)
-// 4️⃣ Procesar productos "Compra Con" (ahora vienen dentro de item.extra_options)
+// 4️⃣ Procesar productos "Compra Con" (productos extra opcionales)
 let extraOptions = [];
-try {
-  console.log("🧩 Iniciando lectura de extra_options en los lineItems...");
-  console.log("lineItems recibidos:", JSON.stringify(lineItems, null, 2));
-  // Validar que lineItems sea un array
-  if (!Array.isArray(lineItems)) {
-    console.warn("⚠️ lineItems no es un array, valor recibido:", lineItems);
-  } else {
-    for (const [index, item] of lineItems.entries()) {
-      console.log(`📦 Producto [${index}] -> ID: ${item.product_id}, Nombre: ${item.name}`);
 
-      // Validar estructura de extra_options
-      if (!Array.isArray(item.extra_options)) {
-        console.log(`   ⚠️ item.extra_options no es array (tipo: ${typeof item.extra_options})`, item.extra_options);
-        continue;
+try {
+  console.log("🧩 Iniciando detección de productos extra 'Compra Con'...");
+
+  // Detectamos si el pedido viene desde WooCommerce (webhook)
+  // Si los lineItems tienen 'meta_data' con '_tmcartepo_data', asumimos webhook Woo
+  const esWebhookWoo = Array.isArray(lineItems) && lineItems.some(item =>
+    Array.isArray(item.meta_data) &&
+    item.meta_data.some(m => m.key === "_tmcartepo_data")
+  );
+
+  for (const [index, item] of lineItems.entries()) {
+    console.log(`📦 Analizando producto [${index}] → ${item.name || item.product_id}`);
+
+    let extrasEncontrados = [];
+
+    if (esWebhookWoo) {
+      // 🔹 CASO: WEBHOOK DE WOO (datos en meta_data)
+      const metaExtra = item.meta_data?.find(m => m.key === "_tmcartepo_data");
+
+      if (metaExtra && Array.isArray(metaExtra.value)) {
+        extrasEncontrados = metaExtra.value.filter(opt =>
+          typeof opt.name === "string" && opt.name.toLowerCase().includes("compra con")
+        );
       }
 
-      console.log(`   🔍 Extra options detectados (${item.extra_options.length}):`, item.extra_options);
-
-      // Agregamos los que contienen "Compra Con"
-      //Esta filtro es clave para identificar los productos extra, basicamente busca en el nombre la frase "compra con" en
-      //los datos del extra_options que vienen en los productos del pedido
-      console.log("item.extra_options",item.extra_options);
-      const extrasCompraCon = item.extra_options.filter(opt =>
-        typeof opt.name === 'string' &&
-        opt.name.toLowerCase().includes('compra con')
-      );
-
-      if (extrasCompraCon.length > 0) {
-        console.log(`   🛒 ${extrasCompraCon.length} extras tipo "Compra Con" encontrados en ${item.name}`);
-        extraOptions.push(...extrasCompraCon);
-      } else {
-        console.log(`   ℹ️ Sin extras "Compra Con" en ${item.name}`);
+      if (extrasEncontrados.length > 0) {
+        console.log(`🛒 [WEBHOOK] ${extrasEncontrados.length} extras 'Compra Con' encontrados en ${item.name}`);
+      }
+    } else {
+      // 🔹 CASO: PEDIDO INTERNO / NO WOO (datos en extra_options)
+      if (Array.isArray(item.extra_options)) {
+        extrasEncontrados = item.extra_options.filter(opt =>
+          typeof opt.name === "string" && opt.name.toLowerCase().includes("compra con")
+        );
+        if (extrasEncontrados.length > 0) {
+          console.log(`🛒 [INTERNO] ${extrasEncontrados.length} extras 'Compra Con' encontrados en ${item.name}`);
+        }
       }
     }
+
+    // Si encontramos extras, los agregamos al array principal
+    if (extrasEncontrados.length > 0) {
+      extraOptions.push(...extrasEncontrados);
+    }
   }
+
+  if (extraOptions.length === 0) {
+    console.log("ℹ️ No se detectaron productos extra 'Compra Con' en este pedido.");
+  } else {
+    console.log(`✅ Total extras detectados: ${extraOptions.length}`);
+  }
+
 } catch (errExtra) {
-  console.error("❌ Error al inspeccionar extra_options:", errExtra);
-  extraOptions = []; // Evitamos romper el flujo
+  console.error("❌ Error al inspeccionar productos extra (Compra Con):", errExtra);
+  extraOptions = [];
 }
 
+// 4.1️⃣ Si hay extras, procesarlos automáticamente
 if (extraOptions.length > 0) {
-  console.log(`🛒 Se encontraron ${extraOptions.length} productos extra (Compra Con), procesando...`);
   try {
+    console.log("🚀 Procesando productos extra (Compra Con)...");
     productosExtrasProcesados = await procesarProductosExtraAutomatico(
       extraOptions,
       wooId,
@@ -775,10 +793,7 @@ if (extraOptions.length > 0) {
     console.error("❌ Error procesando productos extra (Compra Con):", errProcesarExtras);
     throw errProcesarExtras;
   }
-} else {
-  console.log("ℹ️ No se encontraron extras 'Compra Con' en este pedido.");
 }
-
 
       
 
@@ -1057,7 +1072,7 @@ exports.pedidoCompletado = async (req, res) => {
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
 
-
+  
   try {
     
     const tiendas = await WooConfig.getAllConfigs();
@@ -1078,7 +1093,7 @@ const tiendas = [
       },
       
     ];
-  */  
+   */
     for (const tienda of tiendas) {
       console.log(`📦 Revisando pedidos de tienda: ${tienda.id}`);
 
