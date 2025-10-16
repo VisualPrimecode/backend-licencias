@@ -268,12 +268,11 @@ const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad,
   }
 };
 
-
 const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedido) => {
   console.log("→ Entrando a obtenerSerialDisponible2");
   console.log("producto_id:", producto_id, "woocommerce_id:", woocommerce_id, "numero_pedido:", numero_pedido);
 
-  const mapaEquivalencias = {
+ const mapaEquivalencias = {
     // IDs reales que comparten seriales
     //office 365
     388: [330], 
@@ -295,19 +294,19 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
     340: [339]
 
   };
-
   const connection = await db.getConnection();
 
   try {
     await connection.beginTransaction();
 
-    const productosRelacionados = mapaEquivalencias[producto_id] || [producto_id];
-    console.log("Productos equivalentes a revisar:", productosRelacionados);
+    // 🔹 Armar lista de productos a revisar (propio + equivalentes)
+    const equivalentes = mapaEquivalencias[producto_id] || [];
+    const productosRelacionados = [producto_id, ...equivalentes.filter(id => id !== producto_id)];
+    console.log("Productos a revisar (en orden):", productosRelacionados);
 
     let serial = null;
     let productoOriginalDelSerial = null;
 
-    // 🔹 Buscar serial disponible para cualquier producto equivalente
     for (const idRelacionado of productosRelacionados) {
       const [rows] = await connection.query(
         `
@@ -331,11 +330,11 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
 
     if (!serial) {
       await connection.rollback();
-      console.log("⚠️ No hay serial disponible para ninguno de los productos equivalentes");
+      console.log("⚠️ No hay serial disponible para el producto ni sus equivalentes");
       return undefined;
     }
 
-    // 🔹 Actualizar el serial: asignar y cambiar producto_id al producto real del pedido
+    // 🔹 Actualizar el serial: asignar y vincularlo al producto del pedido
     await connection.query(
       `
       UPDATE seriales
@@ -350,14 +349,14 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
 
     await connection.commit();
 
-    console.log(`✅ Serial ${serial.codigo} (originalmente de producto ${productoOriginalDelSerial}) asignado ahora a producto ${producto_id}`);
+    console.log(`✅ Serial ${serial.codigo} (de producto ${productoOriginalDelSerial}) asignado a producto ${producto_id}`);
 
     return {
       ...serial,
       estado: 'asignado',
       numero_pedido,
       woocommerce_id,
-      producto_id, // producto final del pedido
+      producto_id,
     };
   } catch (error) {
     await connection.rollback();
@@ -367,6 +366,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
     connection.release();
   }
 };
+
 
 
 
