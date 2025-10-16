@@ -269,60 +269,106 @@ const obtenerSerialesDisponibles = async (producto_id, woocommerce_id, cantidad,
 };
 
 
-
 const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedido) => {
-  console.log("entro a obtener serial disponible 2");
+  console.log("→ Entrando a obtenerSerialDisponible2");
   console.log("producto_id:", producto_id, "woocommerce_id:", woocommerce_id, "numero_pedido:", numero_pedido);
+
+  const mapaEquivalencias = {
+    // IDs reales que comparten seriales
+    //office 365
+    388: [330], 
+    330: [388],
+    //office 2024
+    386: [329],
+    416: [329],
+    //office 2021
+    391: [331],
+    400: [331],
+    426: [331],
+    439: [331],
+    //windows 11/10 home
+    338: [337],
+    337: [338],
+    //windows 11/10 pro
+    336: [371],
+    371: [336],
+    //mcafee antivirus/internet plus
+    340: [339]
+
+  };
+
   const connection = await db.getConnection();
+
   try {
     await connection.beginTransaction();
 
-    // 1. Seleccionar el primer serial disponible y bloquearlo
-    const [rows] = await connection.query(
-      `SELECT id, codigo
-       FROM seriales
-       WHERE producto_id = ?
-         AND estado = 'disponible'
-       ORDER BY fecha_ingreso ASC
-       LIMIT 1
-       FOR UPDATE`,
-      [producto_id]
-    );
+    const productosRelacionados = mapaEquivalencias[producto_id] || [producto_id];
+    console.log("Productos equivalentes a revisar:", productosRelacionados);
 
-    if (rows.length === 0) {
-      await connection.rollback();
-      return undefined; // No hay serial disponible
+    let serial = null;
+    let productoOriginalDelSerial = null;
+
+    // 🔹 Buscar serial disponible para cualquier producto equivalente
+    for (const idRelacionado of productosRelacionados) {
+      const [rows] = await connection.query(
+        `
+        SELECT id, codigo, producto_id
+        FROM seriales
+        WHERE producto_id = ?
+          AND estado = 'disponible'
+        ORDER BY fecha_ingreso ASC
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [idRelacionado]
+      );
+
+      if (rows.length > 0) {
+        serial = rows[0];
+        productoOriginalDelSerial = idRelacionado;
+        break;
+      }
     }
 
-    const serial = rows[0];
+    if (!serial) {
+      await connection.rollback();
+      console.log("⚠️ No hay serial disponible para ninguno de los productos equivalentes");
+      return undefined;
+    }
 
-    // 2. Marcar como asignado y actualizar el número de pedido y woocommerce_id
+    // 🔹 Actualizar el serial: asignar y cambiar producto_id al producto real del pedido
     await connection.query(
-      `UPDATE seriales
-       SET estado = 'asignado',
-           numero_pedido = ?,
-           woocommerce_id = ?
-       WHERE id = ?`,
-      [numero_pedido, woocommerce_id, serial.id]
+      `
+      UPDATE seriales
+      SET estado = 'asignado',
+          numero_pedido = ?,
+          woocommerce_id = ?,
+          producto_id = ?
+      WHERE id = ?
+      `,
+      [numero_pedido, woocommerce_id, producto_id, serial.id]
     );
 
-    // 3. Confirmar la transacción
     await connection.commit();
 
-    // 4. Retornar el serial ya reservado con su número de pedido
+    console.log(`✅ Serial ${serial.codigo} (originalmente de producto ${productoOriginalDelSerial}) asignado ahora a producto ${producto_id}`);
+
     return {
       ...serial,
       estado: 'asignado',
       numero_pedido,
-      woocommerce_id
+      woocommerce_id,
+      producto_id, // producto final del pedido
     };
   } catch (error) {
     await connection.rollback();
-    throw new Error('Error al obtener y asignar serial: ' + error.message);
+    console.error("❌ Error al obtener y asignar serial:", error);
+    throw new Error("Error al obtener y asignar serial: " + error.message);
   } finally {
     connection.release();
   }
 };
+
 
 
 // models/serialesModel.js
