@@ -277,7 +277,6 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
     // IDs reales que comparten seriales
     //office 365
     388: [330], 
-    330: [388],
     //office 2024
     386: [329],
     416: [329],
