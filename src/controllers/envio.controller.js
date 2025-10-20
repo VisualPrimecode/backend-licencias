@@ -378,6 +378,8 @@ exports.createEnvio = async (req, res) => {
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización44s...');
   console.log('Datos de la cotización:', JSON.stringify(req.body, null, 2));
+  const descuentoPorcentaje = Number(req.body.descuento_porcentaje) || 0;
+
 
   try {
     // ✅ Obtener plantilla relacionada a la tienda y motivo 'cotizacion'
@@ -398,7 +400,7 @@ exports.createCotizacion = async (req, res) => {
       nombre_cliente: req.body.nombre_cliente || 'Cliente',
       numero_cotizacion: req.body.numero_cotizacion || 'N/A',
       store_id: req.body.woocommerce_id || 3,
-      moneda: req.body.moneda || 'CLP' // 👈 nueva moneda con valor por defecto
+      moneda: req.body.moneda || 'CLP' //valor por defecto
     };
 
     console.log('Datos de la cotización procesados:', cotizacionData);
@@ -475,7 +477,17 @@ exports.createCotizacion = async (req, res) => {
         });
       }
     }
+    // 💸 Aplicar descuento (si existe)
+const totalConDescuento = descuentoPorcentaje > 0
+  ? Number((total - (total * (descuentoPorcentaje / 100))).toFixed(2))
+  : total;
 
+  const montoDescuento = descuentoPorcentaje > 0
+  ? Number((total * (descuentoPorcentaje / 100)).toFixed(2))
+  : 0;
+
+console.log(`Total con descuento aplicado: ${totalConDescuento} (${descuentoPorcentaje}%)`);
+console.log(`Monto de descuento: ${montoDescuento}`);
     // 🧾 Construir HTML básico con placeholders
     const cuerpo_html = plantilla.cuerpo_html || '';
     const asunto_correo = plantilla.asunto || 'Cotización';
@@ -500,7 +512,9 @@ exports.createCotizacion = async (req, res) => {
       asunto_correo,
       cuerpo_html,
       estado_envio: 'PENDIENTE',
-      mensaje_error: null
+      mensaje_error: null,
+      descuento: descuentoPorcentaje, // 👈 nuevo campo
+      
     });
 
     // 📦 Encolar job para envío
@@ -514,7 +528,10 @@ exports.createCotizacion = async (req, res) => {
       baseCurrency,
       monedaDestino,
       smtpConfig,
-      plantilla
+      plantilla,
+      descuentoPorcentaje,   // 👈 nuevo campo
+  totalConDescuento,
+  montoDescuento  
     });
 
     console.log('✅ Job de cotización encolado correctamente');
