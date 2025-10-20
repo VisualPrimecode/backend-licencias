@@ -9,6 +9,11 @@ module.exports = async function cotizacionProcessor(job) {
 
   try {
     const smtpConfig = cotizacion.smtpConfig;
+    const descuentoPorcentaje = cotizacion.descuentoPorcentaje || 0;
+    const montoDescuento = cotizacion.montoDescuento || 0;
+    const totalConDescuento = cotizacion.totalConDescuento || cotizacion.total;
+
+    console.log(`💸 Descuento aplicado en el processor: ${descuentoPorcentaje}%, Monto descuento: ${montoDescuento}`);
 
     if (!smtpConfig || !smtpConfig.host || !smtpConfig.user || !smtpConfig.pass) {
       throw new Error('❌ Configuración SMTP inválida o incompleta recibida en el job');
@@ -53,10 +58,13 @@ module.exports = async function cotizacionProcessor(job) {
     const totalFormateado = formatoMoneda(total);
     const subtotalFormateado = formatoMoneda(subtotal);
     const ivaFormateado = formatoMoneda(iva);
+    const totalConDescuentoFormateado = formatoMoneda(totalConDescuento);
+    const montoDescuentoFormateado = formatoMoneda(montoDescuento);
+
+    console.log('monto descuento formateado:', montoDescuentoFormateado);
 
     // 🛒 Generar tabla de productos
     const productos = Array.isArray(cotizacion.productos) ? cotizacion.productos : [];
-
     const productosHtml = productos.map(p => {
       const precio = formatoMoneda(p.price);
       return `
@@ -67,6 +75,29 @@ module.exports = async function cotizacionProcessor(job) {
         </tr>
       `;
     }).join('');
+
+    // 🧩 Bloque dinámico de descuento
+    let bloqueDescuento = '';
+    if (descuentoPorcentaje && descuentoPorcentaje > 0) {
+      bloqueDescuento = `
+        <tr>
+          <td style="padding: 6px 12px; text-align: left; color: #444;">
+            <strong>Descuento (${descuentoPorcentaje}%)</strong>
+          </td>
+          <td style="padding: 6px 12px; text-align: right; color: #444;">
+            ${montoDescuentoFormateado}
+          </td>
+        </tr>
+        <tr style="background-color: #d0ebff;">
+          <td style="padding: 8px 12px; text-align: left; font-weight: bold; color: #0d47a1;">
+            Total con Descuento
+          </td>
+          <td style="padding: 8px 12px; text-align: right; font-weight: bold; color: #0d47a1;">
+            ${totalConDescuentoFormateado}
+          </td>
+        </tr>
+      `;
+    }
 
     // 🧠 Reemplazar placeholders en plantilla
     let htmlContent = plantilla.cuerpo_html || '';
@@ -80,7 +111,8 @@ module.exports = async function cotizacionProcessor(job) {
       .replace(/{{firma}}/g, plantilla.firma || '')
       .replace(/{{logo_url}}/g, plantilla.logo_url || '')
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
-      .replace(/{{validez_texto}}/g, plantilla.validez_texto || '');
+      .replace(/{{validez_texto}}/g, plantilla.validez_texto || '')
+      .replace(/{{bloque_descuento}}/g, bloqueDescuento); // 👈 bloque dinámico insertado aquí
 
     // ✉️ Asunto con reemplazos
     const subject = (plantilla.asunto || 'Tu cotización')
