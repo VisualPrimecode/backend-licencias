@@ -2,7 +2,8 @@ const Webhook = require('../models/webhook.model');
 const Empresa = require('../models/empresa.model');
 const Serial = require('../models/serial.model');
 const WooConfig = require('../models/woocommerce_config.model');
-const Informe = require('../models/informes.model');
+const { calcularStockRestantePorHora } = require('../controllers/informes.controller');
+
 const WooProductMapping = require('../models/wooProductMapping.model');
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); 
