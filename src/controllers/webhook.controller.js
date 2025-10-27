@@ -1034,6 +1034,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
 // =========================
 
 try {
+    console.log("🚨 Evaluando alerta predictiva de stock...");
 
   // ✅ Obtener hora actual de Chile en formato HH:mm
   const ahoraChile = new Date().toLocaleString("en-US", { timeZone: "America/Santiago" });
@@ -1048,6 +1049,7 @@ try {
         .filter(id => id != null)
     )
   ];
+  console.log("Producto IDs para alerta predictiva:", productoIds);
 
   // ✅ Solo ejecutamos si hay productos válidos
   if (productoIds.length > 0) {
