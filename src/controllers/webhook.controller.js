@@ -1015,7 +1015,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
 
     // 9. Registrar en BD
     const id = await Envio.createEnvio(envioData);
-
+    console.log("productos procesados antes de encolar",productosProcesados);
     // 10. Encolar para envío
     await encolarEnvio(
       id,
