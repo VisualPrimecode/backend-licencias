@@ -4,7 +4,7 @@ const model = require('../models/webhook.model');
 
 // Obtener todas las configuraciones WooCommerce
 const getAllConfigs = async () => {
-  const [rows] = await db.query('SELECT * FROM woocommerce_api_config');
+  const [rows] = await db.query('SELECT * FROM woocommerce_api_config where id<6');
   return rows;
 };
 //obtener productos de WooCommerce por ID de wooCommerce
