@@ -263,7 +263,8 @@ exports.getPromedioProductosGlobal = async (req, res) => {
     res.status(500).json({ error: "Error al generar informe GLOBAL de promedio de ventas por producto" });
   }
 };
-
+//pedidos pendientes
+//revisar pedidos
 // Obtener pedidos de WooCommerce que aún no han sido enviados
 exports.getWooOrdersNotSent = async (req, res) => {
   console.log('🚚 Verificando pedidos no enviados...');

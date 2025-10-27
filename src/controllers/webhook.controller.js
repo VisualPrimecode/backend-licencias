@@ -2,7 +2,7 @@ const Webhook = require('../models/webhook.model');
 const Empresa = require('../models/empresa.model');
 const Serial = require('../models/serial.model');
 const WooConfig = require('../models/woocommerce_config.model');
-
+const Informe = require('../models/informes.model');
 const WooProductMapping = require('../models/wooProductMapping.model');
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); 
@@ -980,7 +980,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       numero_pedido,
       registrarEnvioError
     );
-
+    
     // 7. Construcción del objeto envío
    function formatFechaMySQL(dateInput = new Date()) {
   const date = (dateInput instanceof Date)
@@ -1029,8 +1029,48 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
 
     console.log(`✅ Pedido ${numero_pedido} procesado y encolado exitosamente`);
 
-    // 11. Liberar lock como completado
+    // =========================
+// 🔥 11. Evaluar alerta predictiva
+// =========================
+
+try {
+
+  // ✅ Obtener hora actual de Chile en formato HH:mm
+  const ahoraChile = new Date().toLocaleString("en-US", { timeZone: "America/Santiago" });
+  const fechaChile = new Date(ahoraChile);
+  const horaChile = fechaChile.toTimeString().slice(0, 5); // "HH:mm"
+
+  // ✅ Extraer IDs de productos únicos del pedido
+  const productoIds = [
+    ...new Set(
+      productosProcesados
+        .map(p => p.producto_id)
+        .filter(id => id != null)
+    )
+  ];
+
+  // ✅ Solo ejecutamos si hay productos válidos
+  if (productoIds.length > 0) {
+
+    console.log("🔎 Ejecutando alerta predictiva para productos:", productoIds);
+
+    await calcularStockRestantePorHora({
+      body: {
+        hora_actual: horaChile,
+        productoIds
+      }
+    }, {
+      status: () => ({ json: () => {} })  // 📌 mock de response para compatibilidad
+    });
+
+  }
+
+} catch (alertError) {
+  console.error("⚠️ Error ejecutando alerta predictiva:", alertError);
+}
+
     await PedidosLock.liberarLock(wooId, numero_pedido, 'completed');
+//await verificarStockProductos(productosProcesados);
 
     return id;
 
@@ -1071,7 +1111,6 @@ exports.pedidoCompletado = async (req, res) => {
 
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
-
   
   try {
     

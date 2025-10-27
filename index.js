@@ -1,6 +1,7 @@
 // index.js
 
 const app = require('./src/app');
+require('./src/jobs/cronJobs');
 
 const PORT = process.env.PORT || 3000;
 

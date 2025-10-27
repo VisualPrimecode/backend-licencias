@@ -501,8 +501,8 @@ const getProductosVendidosPorRango = async (fechaInicio, fechaFin) => {
 };
 
 const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
-  console.log("📊 Entrando en getEstadoStockProductos");
-  console.log(`⏳ Fechas para promedio semanal: ${fechaInicio} → ${fechaFin}`);
+  console.log("📊 Entrando en getEstadoStockProductos metodo del modelo");
+  console.log(`⏳ Fechas analizadas: ${fechaInicio} → ${fechaFin}`);
 
   try {
     const query = `
@@ -524,6 +524,24 @@ const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
           ) AS sub
           GROUP BY sub.producto_id
       ),
+      promedio_diario AS (
+          SELECT 
+              sub.producto_id,
+              ROUND(AVG(sub.total_vendidos), 2) AS promedio_diario
+          FROM (
+              SELECT 
+                  DATE(e.fecha_envio) AS fecha,
+                  s.producto_id,
+                  COUNT(s.id) AS total_vendidos
+              FROM envios e
+              JOIN seriales s 
+                  ON e.numero_pedido = s.numero_pedido
+              WHERE e.estado = 'enviado'
+                AND e.fecha_envio BETWEEN ? AND ?
+              GROUP BY DATE(e.fecha_envio), s.producto_id
+          ) AS sub
+          GROUP BY sub.producto_id
+      ),
       stock_actual AS (
           SELECT 
               s.producto_id,
@@ -537,25 +555,29 @@ const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
           p.nombre AS producto,
           COALESCE(sa.disponibles, 0) AS stock_disponible,
           COALESCE(ps.promedio_semanal, 0) AS promedio_semanal,
-          (COALESCE(sa.disponibles, 0) - COALESCE(ps.promedio_semanal, 0)) AS diferencia,
+          COALESCE(pd.promedio_diario, 0) AS promedio_diario,
+          (COALESCE(sa.disponibles, 0) - COALESCE(ps.promedio_semanal, 0)) AS dif_semana,
+          (COALESCE(sa.disponibles, 0) - COALESCE(pd.promedio_diario, 0)) AS dif_dia,
           CASE 
-              WHEN COALESCE(sa.disponibles, 0) >= COALESCE(ps.promedio_semanal, 0) 
-                  THEN 'Stock suficiente'
-              ELSE 'Necesita reponer'
+              WHEN COALESCE(sa.disponibles, 0) < COALESCE(pd.promedio_diario, 0) 
+                  THEN 'Riesgo: stock insuficiente para hoy'
+              WHEN COALESCE(sa.disponibles, 0) < COALESCE(ps.promedio_semanal, 0)
+                  THEN 'Atención: stock bajo en relación semanal'
+              ELSE 'Stock suficiente'
           END AS estado_stock
       FROM productos p
       LEFT JOIN stock_actual sa ON p.id = sa.producto_id
       LEFT JOIN promedio_semanal ps ON p.id = ps.producto_id
+      LEFT JOIN promedio_diario pd ON p.id = pd.producto_id
       ORDER BY 
-          CASE 
-              WHEN COALESCE(sa.disponibles, 0) < COALESCE(ps.promedio_semanal, 0) THEN 1
-              ELSE 2
-          END,
-          diferencia ASC;
+  COALESCE(pd.promedio_diario, 0) DESC;
+
     `;
 
-    const [rows] = await db.query(query, [fechaInicio, fechaFin]);
+    // Ejecutar consulta con los parámetros de fecha
+    const [rows] = await db.query(query, [fechaInicio, fechaFin, fechaInicio, fechaFin]);
 
+    console.log(`✅ Consulta completada. Registros obtenidos: ${rows.length}`);
     return rows;
 
   } catch (error) {
@@ -563,6 +585,292 @@ const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
     throw new Error('Error al obtener estado de stock: ' + error.message);
   }
 };
+
+/*
+const verificarStockProductos = async (productosProcesados) => {
+  console.log("📦 Iniciando verificación de stock para productos del pedido...");
+  
+  try {
+    if (!Array.isArray(productosProcesados) || productosProcesados.length === 0) {
+      console.warn("⚠️ No se recibieron productos para verificar stock.");
+      return [];
+    }
+
+    // 1️⃣ Extraer IDs únicos de producto
+    const productoIds = [
+      ...new Set(productosProcesados.map(p => p.producto_id))
+    ];
+
+    console.log(`🧮 Productos a verificar: ${productoIds.join(", ")}`);
+
+    // 2️⃣ Definir rango de fechas para calcular consumo promedio (últimos 30 días)
+    const fechaFin = new Date();
+    const fechaInicio = new Date();
+    fechaInicio.setDate(fechaFin.getDate() - 30);
+
+    // 3️⃣ Consulta SQL principal
+    const query = `
+      WITH promedio_diario AS (
+        SELECT 
+            sub.producto_id,
+            ROUND(AVG(sub.total_vendidos), 2) AS promedio_diario
+        FROM (
+            SELECT 
+                DATE(e.fecha_envio) AS fecha,
+                s.producto_id,
+                COUNT(s.id) AS total_vendidos
+            FROM envios e
+            JOIN seriales s ON e.numero_pedido = s.numero_pedido
+            WHERE e.estado = 'enviado'
+              AND s.producto_id IN (?)
+              AND e.fecha_envio BETWEEN ? AND ?
+            GROUP BY DATE(e.fecha_envio), s.producto_id
+        ) AS sub
+        GROUP BY sub.producto_id
+      ),
+      stock_actual AS (
+        SELECT 
+            s.producto_id,
+            COUNT(s.id) AS stock_actual
+        FROM seriales s
+        WHERE s.estado = 'disponible'
+          AND s.producto_id IN (?)
+        GROUP BY s.producto_id
+      )
+      SELECT 
+          p.id AS producto_id,
+          p.nombre AS nombre_producto,
+          COALESCE(sa.stock_actual, 0) AS stock_actual,
+          COALESCE(pd.promedio_diario, 0) AS promedio_diario
+      FROM productos p
+      LEFT JOIN stock_actual sa ON p.id = sa.producto_id
+      LEFT JOIN promedio_diario pd ON p.id = pd.producto_id
+      WHERE p.id IN (?)
+    `;
+
+    const [rows] = await db.query(query, [
+      productoIds,
+      fechaInicio,
+      fechaFin,
+      productoIds,
+      productoIds
+    ]);
+
+    console.log(`✅ Verificación completada. Productos analizados: ${rows.length}`);
+
+    // 4️⃣ Calcular porcentajes y clasificar estado
+    const resultados = rows.map(row => {
+      const promedio = row.promedio_diario || 0;
+      const stock = row.stock_actual || 0;
+
+      let porcentaje_stock = 0;
+      if (promedio > 0) {
+        porcentaje_stock = (stock / promedio) * 100;
+      } else {
+        porcentaje_stock = 100; // sin histórico → se asume stock óptimo
+      }
+
+      let estado_stock = "optimo";
+      if (porcentaje_stock < 20) {
+        estado_stock = "critico";
+      } else if (porcentaje_stock < 50 && porcentaje_stock >= 30) {
+        estado_stock = "advertencia";
+      } else if (porcentaje_stock < 30) {
+        estado_stock = "bajo";
+      }
+
+      return {
+        producto_id: row.producto_id,
+        nombre_producto: row.nombre_producto,
+        stock_actual: stock,
+        promedio_diario: promedio,
+        porcentaje_stock: Number(porcentaje_stock.toFixed(2)),
+        estado_stock
+      };
+    });
+
+    // 5️⃣ Logs de resumen
+    const criticos = resultados.filter(r => r.estado_stock === "critico").length;
+    const advertencias = resultados.filter(r => r.estado_stock === "advertencia").length;
+    console.log(`📊 Resumen: ${criticos} críticos | ${advertencias} advertencias`);
+
+    return resultados;
+
+  } catch (error) {
+    console.error("❌ Error en verificarStockProductos:", error);
+    throw new Error("Error al verificar stock de productos: " + error.message);
+  }
+};*/
+
+/**
+ * Verifica el stock de productos específicos (por ejemplo, los de un pedido),
+ * evalúa su nivel en base al promedio diario de ventas,
+ * y genera alertas en caso de advertencia o nivel crítico.
+ */
+// models/informeModel.js
+const obtenerEstadoAlertaStock = async () => {
+  const query = `
+    SELECT activo
+    FROM alertas_control
+    ORDER BY id DESC
+    LIMIT 1
+  `;
+
+  const [rows] = await db.query(query);
+
+  // Si no hay filas, asumimos desactivado por seguridad
+  if (rows.length === 0) return false;
+
+  return Boolean(rows[0].activo);
+};
+const obtenerPatronHorario = async (productoIds) => {
+  console.log("📊 Analizando patrón horario (1 mes)...");
+
+  const fechaFin = new Date();
+  const fechaInicio = new Date();
+  fechaInicio.setMonth(fechaFin.getMonth() - 1);
+
+  const query = `
+    SELECT 
+        p.nombre AS nombre_producto,
+        sub.producto_id,
+        sub.rango_horario,
+        ROUND(AVG(sub.total_vendidos), 2) AS promedio_vendidos,
+        (
+          SELECT COUNT(*) 
+          FROM seriales s2
+          WHERE s2.producto_id = sub.producto_id
+            AND s2.estado = 'disponible'
+        ) AS stock_actual
+    FROM (
+        SELECT 
+            s.producto_id,
+            CASE 
+                WHEN HOUR(e.fecha_envio) BETWEEN 0 AND 5 THEN 'madrugada'
+                WHEN HOUR(e.fecha_envio) BETWEEN 6 AND 11 THEN 'mañana'
+                WHEN HOUR(e.fecha_envio) BETWEEN 12 AND 17 THEN 'tarde'
+                ELSE 'noche'
+            END AS rango_horario,
+            COUNT(s.id) AS total_vendidos
+        FROM envios e
+        JOIN seriales s 
+            ON e.numero_pedido = s.numero_pedido
+        WHERE e.estado = 'enviado'
+          AND e.fecha_envio BETWEEN ? AND ?
+          AND s.producto_id IN (?)
+        GROUP BY 
+            s.producto_id, 
+            rango_horario, 
+            DATE(e.fecha_envio)
+    ) AS sub
+    JOIN productos p ON p.id = sub.producto_id
+    GROUP BY 
+        sub.producto_id, 
+        sub.rango_horario
+    ORDER BY 
+        sub.producto_id,
+        FIELD(sub.rango_horario, 'madrugada', 'mañana', 'tarde', 'noche');
+  `;
+
+  const [rows] = await db.query(query, [
+    fechaInicio,
+    fechaFin,
+    productoIds
+  ]);
+
+  console.log(`✅ Patrón horario generado (${rows.length} registros).`);
+  return rows;
+};
+
+
+
+const verificarStockProductos = async (productos) => {
+  console.log("📦 Iniciando verificación de stock de productos...");
+
+  if (!Array.isArray(productos) || productos.length === 0) {
+    throw new Error('Debe proporcionar una lista de productos para verificar el stock.');
+  }
+
+  // 🔹 Definir fechas internas (últimos 30 días)
+  const fechaFin = new Date();
+  const fechaInicio = new Date();
+  fechaInicio.setDate(fechaFin.getDate() - 30);
+
+  const productoIds = productos.map(p => p.producto_id);
+
+  try {
+    // 🔹 Consulta principal
+    const query = `
+      WITH promedio_diario AS (
+          SELECT 
+              sub.producto_id,
+              ROUND(AVG(sub.total_vendidos), 2) AS promedio_diario
+          FROM (
+              SELECT 
+                  DATE(e.fecha_envio) AS fecha,
+                  s.producto_id,
+                  COUNT(s.id) AS total_vendidos
+              FROM envios e
+              JOIN seriales s 
+                  ON e.numero_pedido = s.numero_pedido
+              WHERE e.estado = 'enviado'
+                AND e.fecha_envio BETWEEN ? AND ?
+                AND s.producto_id IN (?)
+              GROUP BY DATE(e.fecha_envio), s.producto_id
+          ) AS sub
+          GROUP BY sub.producto_id
+      ),
+      stock_actual AS (
+          SELECT 
+              s.producto_id,
+              COUNT(s.id) AS disponibles
+          FROM seriales s
+          WHERE s.estado = 'disponible'
+            AND s.producto_id IN (?)
+          GROUP BY s.producto_id
+      )
+      SELECT 
+          p.id AS producto_id,
+          p.nombre AS producto,
+          COALESCE(sa.disponibles, 0) AS stock_disponible,
+          COALESCE(pd.promedio_diario, 0) AS promedio_diario,
+          CASE
+              WHEN COALESCE(sa.disponibles, 0) <= (0.2 * COALESCE(pd.promedio_diario, 0)) THEN 'Crítico'
+              WHEN COALESCE(sa.disponibles, 0) <= (0.3 * COALESCE(pd.promedio_diario, 0)) THEN 'Advertencia'
+              WHEN COALESCE(sa.disponibles, 0) > (0.5 * COALESCE(pd.promedio_diario, 0)) THEN 'Óptimo'
+              ELSE 'Aceptable'
+          END AS estado_stock
+      FROM productos p
+      LEFT JOIN stock_actual sa ON p.id = sa.producto_id
+      LEFT JOIN promedio_diario pd ON p.id = pd.producto_id
+      WHERE p.id IN (?)
+      ORDER BY p.id;
+    `;
+
+    const [rows] = await db.query(query, [
+      fechaInicio,
+      fechaFin,
+      productoIds,
+      productoIds,
+      productoIds
+    ]);
+
+    console.log(`✅ Verificación completada. ${rows.length} productos analizados.`);
+
+    // ⚙️ Solo devolvemos los resultados, sin encolar nada
+    return rows;
+
+  } catch (error) {
+    console.error('❌ Error en verificarStockProductos:', error.message);
+    throw new Error('Error al verificar el stock de productos: ' + error.message);
+  }
+};
+
+
+
+
+
+
 module.exports = { 
   getInformeLicenciasOriginales,
   getInformeLicenciasPorMes,
@@ -571,5 +879,8 @@ module.exports = {
   getInformePedidosDetalladoJejePorRango,
   getInformePedidosTotalesJejePorRango,
   getProductosVendidosPorRango,
-  getEstadoStockProductos 
+  getEstadoStockProductos,
+  verificarStockProductos,
+  obtenerPatronHorario,
+  obtenerEstadoAlertaStock 
 };
