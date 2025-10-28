@@ -25,6 +25,22 @@ const obtenerSMTPConfig = async () => {
 
 exports.obtenerSMTPConfig = obtenerSMTPConfig;
 
+// Lista de productos excluidos de alertas
+const productosExcluidos = new Set([
+  '388', // Office 365 Pro Plus – 5PC Permanente
+  '390',
+  '378',
+  '391',
+  '416',//365 indefinido
+  '371', //win 11 pro
+  '343',//eset internet security
+  '428',//Windows 11 Pro + Office 2021 Pro
+]);
+
+// 🔹 Filtrar productos con riesgo o bajo stock, excluyendo los de la lista
+
+
+
 exports.generarAlertaStock = async (req, res) => {
   try {
     // 🔹 Generar fechas automáticas
@@ -55,9 +71,13 @@ exports.generarAlertaStock = async (req, res) => {
     };
 
     // 2️⃣ Filtrar productos con riesgo o bajo stock
-    const productosEnRiesgo = resultados.filter(p =>
-      p.estado_stock?.includes('Riesgo') || p.estado_stock?.includes('Atención')
-    );
+   const productosEnRiesgo = resultados.filter(p =>
+  (p.estado_stock?.includes('Riesgo') || 
+   p.estado_stock?.includes('Atención') || 
+   p.estado_stock?.includes('CRÍTICO') || 
+   p.estado_stock?.includes('ALERTA')) &&
+  !productosExcluidos.has(String(p.producto_id))
+);
 
     if (productosEnRiesgo.length === 0) {
       console.log('✅ No hay productos en riesgo ni con stock bajo. Nada que encolar.');
@@ -81,7 +101,7 @@ exports.generarAlertaStock = async (req, res) => {
       empresa: { nombre: 'Mi Distribuidora', dominio_web: 'midistribuidora.com' },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ['claudiorodriguez7778@gmail.com'],//cleon@cloudi.cl
+      email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl'],//cleon@cloudi.cl
     };                                                              //dtorres@cloudi.cl
 
 

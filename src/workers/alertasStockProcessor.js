@@ -43,7 +43,9 @@ const productosNoPrioritarios = [
   "Windows Server 2019 Standard",
   "Panda Dome Essential 2023",
   "panda dome essentials",
-  "minecraft"
+  "minecraft",
+  "win 10 pro + office 2019 pro + mcafe antivirus",
+  
 ];
 
 module.exports = async function alertasStockProcessor(job) {

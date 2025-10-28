@@ -506,71 +506,61 @@ const getEstadoStockProductos = async (fechaInicio, fechaFin) => {
 
   try {
     const query = `
-      WITH promedio_semanal AS (
-          SELECT 
-              sub.producto_id,
-              ROUND(AVG(sub.total_vendidos), 2) AS promedio_semanal
-          FROM (
-              SELECT 
-                  YEARWEEK(e.fecha_envio, 1) AS anio_semana,
-                  s.producto_id,
-                  COUNT(s.id) AS total_vendidos
-              FROM envios e
-              JOIN seriales s 
-                  ON e.numero_pedido = s.numero_pedido
-              WHERE e.estado = 'enviado'
-                AND e.fecha_envio BETWEEN ? AND ?
-              GROUP BY YEARWEEK(e.fecha_envio, 1), s.producto_id
-          ) AS sub
-          GROUP BY sub.producto_id
-      ),
-      promedio_diario AS (
-          SELECT 
-              sub.producto_id,
-              ROUND(AVG(sub.total_vendidos), 2) AS promedio_diario
-          FROM (
-              SELECT 
-                  DATE(e.fecha_envio) AS fecha,
-                  s.producto_id,
-                  COUNT(s.id) AS total_vendidos
-              FROM envios e
-              JOIN seriales s 
-                  ON e.numero_pedido = s.numero_pedido
-              WHERE e.estado = 'enviado'
-                AND e.fecha_envio BETWEEN ? AND ?
-              GROUP BY DATE(e.fecha_envio), s.producto_id
-          ) AS sub
-          GROUP BY sub.producto_id
-      ),
-      stock_actual AS (
-          SELECT 
-              s.producto_id,
-              COUNT(s.id) AS disponibles
-          FROM seriales s
-          WHERE s.estado = 'disponible'
-          GROUP BY s.producto_id
-      )
-      SELECT 
-          p.id AS producto_id,
-          p.nombre AS producto,
-          COALESCE(sa.disponibles, 0) AS stock_disponible,
-          COALESCE(ps.promedio_semanal, 0) AS promedio_semanal,
-          COALESCE(pd.promedio_diario, 0) AS promedio_diario,
-          (COALESCE(sa.disponibles, 0) - COALESCE(ps.promedio_semanal, 0)) AS dif_semana,
-          (COALESCE(sa.disponibles, 0) - COALESCE(pd.promedio_diario, 0)) AS dif_dia,
-          CASE 
-              WHEN COALESCE(sa.disponibles, 0) < COALESCE(pd.promedio_diario, 0) 
-                  THEN 'Riesgo: stock insuficiente para hoy'
-              WHEN COALESCE(sa.disponibles, 0) < COALESCE(ps.promedio_semanal, 0)
-                  THEN 'Atención: stock bajo en relación semanal'
-              ELSE 'Stock suficiente'
-          END AS estado_stock
-      FROM productos p
-      LEFT JOIN stock_actual sa ON p.id = sa.producto_id
-      LEFT JOIN promedio_semanal ps ON p.id = ps.producto_id
-      LEFT JOIN promedio_diario pd ON p.id = pd.producto_id
-      ORDER BY 
-  COALESCE(pd.promedio_diario, 0) DESC;
+      WITH ventas_diarias AS (
+    SELECT 
+        s.producto_id,
+        DATE(e.fecha_envio) AS fecha,
+        COUNT(s.id) AS unidades_vendidas
+    FROM envios e
+    JOIN seriales s ON e.numero_pedido = s.numero_pedido
+    WHERE e.estado = 'enviado'
+      AND e.fecha_envio BETWEEN ? AND ?
+    GROUP BY s.producto_id, DATE(e.fecha_envio)
+),
+promedios AS (
+    SELECT 
+        producto_id,
+        ROUND(AVG(unidades_vendidas), 2) AS promedio_diario,
+        ROUND(AVG(unidades_vendidas) * 7, 2) AS estimado_semanal,
+        COUNT(DISTINCT fecha) AS dias_con_ventas
+    FROM ventas_diarias
+    GROUP BY producto_id
+),
+stock_actual AS (
+    SELECT 
+        s.producto_id,
+        COUNT(s.id) AS disponibles
+    FROM seriales s
+    WHERE s.estado = 'disponible'
+    GROUP BY s.producto_id
+)
+SELECT 
+    p.id AS producto_id,
+    p.nombre AS producto,
+    COALESCE(sa.disponibles, 0) AS stock_disponible,
+    COALESCE(pr.promedio_diario, 0) AS promedio_diario,
+    COALESCE(pr.estimado_semanal, 0) AS estimado_semanal,
+    COALESCE(pr.dias_con_ventas, 0) AS dias_con_ventas,
+    -- Días de cobertura = stock / promedio_diario
+    CASE 
+        WHEN COALESCE(pr.promedio_diario, 0) > 0 
+        THEN ROUND(COALESCE(sa.disponibles, 0) / pr.promedio_diario, 1)
+        ELSE NULL
+    END AS dias_cobertura,
+    CASE 
+        WHEN COALESCE(pr.promedio_diario, 0) = 0 THEN 'Sin ventas en período'
+        WHEN COALESCE(sa.disponibles, 0) / COALESCE(pr.promedio_diario, 1) < 1 
+            THEN 'CRÍTICO: Stock para menos de 1 día'
+        WHEN COALESCE(sa.disponibles, 0) / COALESCE(pr.promedio_diario, 1) < 7 
+            THEN 'ALERTA: Stock para menos de 1 semana'
+        WHEN COALESCE(sa.disponibles, 0) / COALESCE(pr.promedio_diario, 1) < 14 
+            THEN 'PRECAUCIÓN: Stock para menos de 2 semanas'
+        ELSE 'Stock suficiente'
+    END AS estado_stock
+FROM productos p
+LEFT JOIN stock_actual sa ON p.id = sa.producto_id
+LEFT JOIN promedios pr ON p.id = pr.producto_id
+ORDER BY dias_cobertura ASC NULLS LAST, pr.promedio_diario DESC;
 
     `;
 

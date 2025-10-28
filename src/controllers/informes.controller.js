@@ -633,7 +633,7 @@ exports.calcularStockRestantePorHora = async (req, res) => {
       empresa: { nombre: "Sistema de Alertas Predictivas" },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ["claudiorodriguez7778@gmail.com"]
+      email_destinatario: ["claudiorodriguez7778@gmail.com","cleon@cloudi.cl","dtorres@cloudi.cl"]
     };
 
     const job = await stockProductoQueue.add(jobData, {
