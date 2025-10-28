@@ -78,8 +78,7 @@ exports.generarAlertaStock = async (req, res) => {
    p.estado_stock?.includes('ALERTA')) &&
   !productosExcluidos.has(String(p.producto_id))
 );
-console.log("producto excluidos set:", productosExcluidos);
-console.log("productos en riesgo filtrados:", productosEnRiesgo);
+
     if (productosEnRiesgo.length === 0) {
       console.log('✅ No hay productos en riesgo ni con stock bajo. Nada que encolar.');
       return res.status(200).json({
