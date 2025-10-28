@@ -445,6 +445,8 @@ exports.obtenerPatronHorario = async (req, res) => {
 exports.calcularStockRestantePorHora = async (req, res) => {
   console.log("🕒 Iniciando cálculo de stock restante considerando hora parcial...");
 
+  // 🚫 LISTA DE PRODUCTOS EXCLUIDOS - NO GENERAN ALERTAS
+  const PRODUCTOS_EXCLUIDOS = [388, 390, 378, 391, 416,371,343,428]; // ⬅️ AGREGAR/QUITAR IDs AQUÍ
   try {
     const { hora_actual, productoIds } = req.body;
     
@@ -546,6 +548,12 @@ exports.calcularStockRestantePorHora = async (req, res) => {
       const info = stockEstimado[productoId];
       const { stock_actual, consumo_estimado_restante, nombre } = info;
 
+      // 🚫 VALIDAR SI EL PRODUCTO ESTÁ EXCLUIDO
+      if (PRODUCTOS_EXCLUIDOS.includes(Number(productoId))) {
+        console.log(`⏭️ Producto ${productoId} (${nombre}) está en lista de exclusión - no se genera alerta.`);
+        continue; // ⬅️ SALTAR ESTE PRODUCTO COMPLETAMENTE
+      }
+
       if (consumo_estimado_restante <= 0) continue;
 
       // Condición base de agotamiento
@@ -633,7 +641,7 @@ exports.calcularStockRestantePorHora = async (req, res) => {
       empresa: { nombre: "Sistema de Alertas Predictivas" },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ["claudiorodriguez7778@gmail.com"]
+      email_destinatario: ["claudiorodriguez7778@gmail.com","cleon@cloudi.cl","dtorres@cloudi.cl"]
     };
 
     const job = await stockProductoQueue.add(jobData, {
