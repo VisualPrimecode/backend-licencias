@@ -29,7 +29,7 @@ exports.obtenerSMTPConfig = obtenerSMTPConfig;
 const productosExcluidos = new Set([
   '388', // Office 365 Pro Plus – 5PC Permanente
   '390',
-  '378',
+  '378',//microsoft 365 family copilot IA 15 meses
   '391',
   '416',//365 indefinido
   '371', //win 11 pro
@@ -101,7 +101,7 @@ exports.generarAlertaStock = async (req, res) => {
       empresa: { nombre: 'Mi Distribuidora', dominio_web: 'midistribuidora.com' },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl'],//cleon@cloudi.cl
+      email_destinatario: ['claudiorodriguez7778@gmail.com'],//cleon@cloudi.cl
     };                                                              //dtorres@cloudi.cl
 
 
