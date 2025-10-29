@@ -101,8 +101,8 @@ exports.generarAlertaStock = async (req, res) => {
       empresa: { nombre: 'Mi Distribuidora', dominio_web: 'midistribuidora.com' },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ['claudiorodriguez7778@gmail.com'],//cleon@cloudi.cl
-    };                                                              //dtorres@cloudi.cl
+      email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl'],//
+    };                                                              //
 
 
     // 5️⃣ Encolar job en Bull
