@@ -12,7 +12,6 @@ module.exports = async function alertaFaltaSerialesProcessor(job) {
       productos_faltantes, // [{nombre, cantidad_faltante, producto_id}]
       fecha_fallo,
       intentos,
-      empresaName
     } = alerta;
 
     // Validar smtpConfig
@@ -68,7 +67,6 @@ module.exports = async function alertaFaltaSerialesProcessor(job) {
       subject: `🚨 Pedido #${numero_pedido} pendiente - Falta de seriales`,
       text: `El pedido ${numero_pedido} no pudo procesarse por falta de seriales.`,
       html: htmlFinal,
-      nombreEmpresa: empresaName || 'Sistema de Pedidos'
     });
 
     console.log(`✅ Alerta enviada para pedido ${numero_pedido}`);
