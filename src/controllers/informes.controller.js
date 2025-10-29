@@ -441,15 +441,22 @@ exports.obtenerPatronHorario = async (req, res) => {
   }
 };
 
+const {
+  crearControlSiNoExiste,
+  obtenerControlPorProducto,
+  incrementarContador,
+  estaBloqueado,
+  bloquearProducto
+} = require('../models/controlAlertasStockModel');
 
 exports.calcularStockRestantePorHora = async (req, res) => {
   console.log("🕒 Iniciando cálculo de stock restante considerando hora parcial...");
 
   // 🚫 LISTA DE PRODUCTOS EXCLUIDOS - NO GENERAN ALERTAS
-  const PRODUCTOS_EXCLUIDOS = [388, 390, 378, 391, 416,371,343,428]; // ⬅️ AGREGAR/QUITAR IDs AQUÍ
+  const PRODUCTOS_EXCLUIDOS = [388, 390, 378, 391, 416, 371, 343, 428]; // ⬅️ AGREGAR/QUITAR IDs AQUÍ
+
   try {
     const { hora_actual, productoIds } = req.body;
-    
 
     // 1️⃣ Validación
     if (!hora_actual || !Array.isArray(productoIds) || productoIds.length === 0) {
@@ -457,8 +464,8 @@ exports.calcularStockRestantePorHora = async (req, res) => {
         error: "Debe proporcionar una hora válida y una lista de IDs de productos."
       });
     }
-    const alertaActiva = await Informe.obtenerEstadoAlertaStock();
 
+    const alertaActiva = await Informe.obtenerEstadoAlertaStock();
     if (!alertaActiva) {
       console.log("🚫 ALERTA DESACTIVADA: No se generarán alertas.");
       return res.status(200).json({
@@ -470,6 +477,7 @@ exports.calcularStockRestantePorHora = async (req, res) => {
         data: {}
       });
     }
+
     // 2️⃣ Convertir hora
     const [horaStr] = hora_actual.split(":");
     const hora = parseInt(horaStr, 10);
@@ -547,18 +555,28 @@ exports.calcularStockRestantePorHora = async (req, res) => {
     for (const productoId of Object.keys(stockEstimado)) {
       const info = stockEstimado[productoId];
       const { stock_actual, consumo_estimado_restante, nombre } = info;
+      const pid = Number(productoId);
 
       // 🚫 VALIDAR SI EL PRODUCTO ESTÁ EXCLUIDO
-      if (PRODUCTOS_EXCLUIDOS.includes(Number(productoId))) {
-        console.log(`⏭️ Producto ${productoId} (${nombre}) está en lista de exclusión - no se genera alerta.`);
-        continue; // ⬅️ SALTAR ESTE PRODUCTO COMPLETAMENTE
+      if (PRODUCTOS_EXCLUIDOS.includes(pid)) {
+        console.log(`⏭️ Producto ${pid} (${nombre}) está en lista de exclusión - no se genera alerta.`);
+        continue;
       }
 
       if (consumo_estimado_restante <= 0) continue;
 
+      // ⚙️ Crear control si no existe
+      await crearControlSiNoExiste(pid);
+
+      // 🔒 Verificar si está bloqueado
+      const bloqueado = await estaBloqueado(pid);
+      if (bloqueado) {
+        console.log(`🚫 Producto ${pid} bloqueado — no se enviarán más alertas hasta actualización de stock.`);
+        continue;
+      }
+
       // Condición base de agotamiento
       if (stock_actual < consumo_estimado_restante) {
-
         const ratio = stock_actual / consumo_estimado_restante;
         let estado = "";
 
@@ -566,15 +584,23 @@ exports.calcularStockRestantePorHora = async (req, res) => {
           // 🔥 Crítico
           estado = "crítico";
           await upsertAlertaCritica({
-            producto_id: Number(productoId),
+            producto_id: pid,
             producto_nombre: nombre,
             estado_stock: estado,
             stock_disponible: stock_actual,
             consumo_estimado_restante
           });
 
+          // 📈 Incrementar contador y verificar bloqueo
+          await incrementarContador(pid);
+          const control = await obtenerControlPorProducto(pid);
+          if (control.alertas_enviadas >= control.max_alertas) {
+            await bloquearProducto(pid, "Se alcanzó el límite de 3 alertas (1 advertencia + 2 críticas).");
+            console.log(`🔒 Producto ${pid} bloqueado automáticamente.`);
+          }
+
           productosEnviar.push({
-            producto_id: Number(productoId),
+            producto_id: pid,
             producto: nombre,
             estado_stock: estado,
             stock_disponible: stock_actual,
@@ -584,19 +610,27 @@ exports.calcularStockRestantePorHora = async (req, res) => {
         } else {
           // 🟡 Advertencia
           estado = "advertencia";
-          const yaExiste = await existeAlertaActivaAdvertencia(Number(productoId));
+          const yaExiste = await existeAlertaActivaAdvertencia(pid);
 
           if (!yaExiste) {
             await registrarAlertaStock({
-              producto_id: Number(productoId),
+              producto_id: pid,
               producto_nombre: nombre,
               estado_stock: estado,
               stock_disponible: stock_actual,
               consumo_estimado_restante
             });
 
+            // 📈 Incrementar contador y verificar bloqueo
+            await incrementarContador(pid);
+            const control = await obtenerControlPorProducto(pid);
+            if (control.alertas_enviadas >= control.max_alertas) {
+              await bloquearProducto(pid, "Se alcanzó el límite de 3 alertas (1 advertencia + 2 críticas).");
+              console.log(`🔒 Producto ${pid} bloqueado automáticamente.`);
+            }
+
             productosEnviar.push({
-              producto_id: Number(productoId),
+              producto_id: pid,
               producto: nombre,
               estado_stock: estado,
               stock_disponible: stock_actual,
@@ -641,7 +675,7 @@ exports.calcularStockRestantePorHora = async (req, res) => {
       empresa: { nombre: "Sistema de Alertas Predictivas" },
       smtpConfig,
       fecha_generacion: new Date().toISOString(),
-      email_destinatario: ["claudiorodriguez7778@gmail.com","cleon@cloudi.cl","dtorres@cloudi.cl"]
+      email_destinatario: ["claudiorodriguez7778@gmail.com", "cleon@cloudi.cl", "dtorres@cloudi.cl"]
     };
 
     const job = await stockProductoQueue.add(jobData, {
@@ -670,4 +704,5 @@ exports.calcularStockRestantePorHora = async (req, res) => {
     });
   }
 };
+
 

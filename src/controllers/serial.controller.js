@@ -595,238 +595,12 @@ exports.cargaMasivaSeriales = async (req, res) => {
 // ============================
 // 🔹 Orquestador principal
 // ============================
-/*
-exports.cargaMasivaSeriales = async (req, res) => {
-  try {
-    // 1. Validar archivo
-    if (!req.file) {
-      return res.status(400).json({ error: 'Archivo no proporcionado' });
-    }
-
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    const filePath = req.file.path;
-    const BATCH_SIZE = 500;
-
-    // 2. Definir alias
-    const aliasMap = {
-      codigo: ['codigo', 'código', 'serial', 'numero_serial', 'número_serial'],
-      id_serial: ['id_serial', 'id serial', 'serial_id'],
-      producto_id: ['producto_id', 'producto id', 'id_producto', 'id producto'],
-      nombre_producto: ['nombre_producto', 'producto', 'producto_nombre', 'nombre producto'],
-      estado: ['estado', 'status', 'situacion', 'situación'],
-      observaciones: ['observaciones', 'obs', 'comentarios', 'nota'],
-      usuario_id: ['usuario_id', 'usuario id', 'id_usuario', 'id usuario'],
-      woocommerce_id: ['woocommerce_id', 'woocommerce id', 'id_woocommerce', 'id woocommerce']
-    };
-
-    // 3. Precargar mapa de WooCommerce por empresa
-    const empresaWooMap = await Serial.precargarWooIdsPorEmpresa();
-
-    // 4. Elegir lector según extensión
-   let lector;
-try {
-  lector = getLector(ext, filePath, aliasMap, empresaWooMap);
-} catch (error) {
-  await fs.promises.unlink(filePath);
-  return res.status(400).json({ error: error.message });
-}
-
-// 5. Procesar archivo en lotes
-let totalFilas = 0;
-let totalInsertados = 0;
-let batch = [];
-
-/// cache en memoria: clave = "empresa:producto", valor = productoInternoId
-const productoCache = new Map();
-
-// contadores agrupados
-const resumenInsertados = new Map(); // clave: empresa:producto
-const resumenOmitidos = new Map();   // clave: empresa:producto:motivo
-
-for await (const fila of lector) {
-  totalFilas++;
-
-  const nombreEmpresa = fila.empresa?.trim() || "";
-  const nombreProducto = fila.nombre_producto?.trim() || "";
-
-  if (!nombreEmpresa || !nombreProducto) {
-    const motivo = `Faltan datos → empresa: "${nombreEmpresa}", producto: "${nombreProducto}"`;
-    console.warn(`Fila omitida: ${motivo}`);
-    const key = `${nombreEmpresa}:${nombreProducto}:${motivo}`;
-    resumenOmitidos.set(key, {
-      empresa: nombreEmpresa,
-      producto: nombreProducto,
-      motivo,
-      cantidad: (resumenOmitidos.get(key)?.cantidad || 0) + 1
-    });
-    continue;
-  }
-
-  const cacheKey = `${nombreEmpresa}:${nombreProducto}`;
-  let productoInternoId = productoCache.get(cacheKey);
-
-  if (productoInternoId === undefined) {
-    console.log(`Resolviendo producto para: ${nombreProducto} en empresa: ${nombreEmpresa}`);
-    productoInternoId = await Empresa.getProductoInternoByEmpresaYProducto(
-      nombreEmpresa,
-      nombreProducto
-    );
-    productoCache.set(cacheKey, productoInternoId); // guarda incluso null
-  }
-
-  if (!productoInternoId) {
-    const motivo = "Sin mapeo interno";
-    console.warn(`Fila omitida: ${nombreProducto} (empresa: ${nombreEmpresa}) - ${motivo}`);
-    const key = `${nombreEmpresa}:${nombreProducto}:${motivo}`;
-    resumenOmitidos.set(key, {
-      empresa: nombreEmpresa,
-      producto: nombreProducto,
-      motivo,
-      cantidad: (resumenOmitidos.get(key)?.cantidad || 0) + 1
-    });
-    continue;
-  }
-
-  fila.producto_id = productoInternoId;
-
-  if (fila.codigo && fila.producto_id) {
-    batch.push(fila);
-
-    // 👇 contar como insertable (aunque el batch se inserta después)
-    const key = `${nombreEmpresa}:${nombreProducto}`;
-    resumenInsertados.set(key, {
-      empresa: nombreEmpresa,
-      producto: nombreProducto,
-      cantidad: (resumenInsertados.get(key)?.cantidad || 0) + 1
-    });
-
-    if (batch.length >= BATCH_SIZE) {
-      try {
-        const resInsert = await insertarLote(batch);
-        totalInsertados += resInsert.affectedRows;
-      } catch (err) {
-        console.error(`❌ Error al insertar lote: ${err.message}`);
-      } finally {
-        batch = [];
-      }
-    }
-  }
-}
-
-// insertar último batch pendiente
-if (batch.length) {
-  try {
-    const resInsert = await insertarLote(batch);
-    totalInsertados += resInsert.affectedRows;
-  } catch (err) {
-    console.error(`❌ Error al insertar último lote: ${err.message}`);
-  }
-}
-
-await fs.promises.unlink(filePath);
-
-// convertir Map → array para respuesta JSON
-const insertadosArray = Array.from(resumenInsertados.values());
-const omitidosArray = Array.from(resumenOmitidos.values());
-
-res.json({
-  mensaje: "Carga completada",
-  total: totalFilas,
-  insertados: totalInsertados,
-  resumen_insertados: insertadosArray,
-  resumen_omitidos: omitidosArray
-});
-
-  } catch (err) {
-    console.error('❌ Error general en carga masiva:', err);
-    res.status(500).json({ error: 'Error al procesar archivo' });
-  }
-};*/
-/*
-exports.cargaMasivaSeriales = async (req, res) => {
-  try {
-    // 1. Validar archivo
-    if (!req.file) {
-      return res.status(400).json({ error: "Archivo no proporcionado" });
-    }
-
-    const ext = path.extname(req.file.originalname).toLowerCase();
-    const filePath = req.file.path;
-    const BATCH_SIZE = 500;
-
-    // 2. Función para limpiar y validar fila
-    const limpiarFila = (fila) => ({
-      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
-      codigo: fila.codigo ? String(fila.codigo).trim() : null,
-      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
-      estado: fila.estado?.trim() || "disponible",
-      fecha_ingreso: fila.fecha_ingreso || new Date(),
-      observaciones: fila.observaciones?.trim() || "",
-      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
-      woocommerce_id: fila.woocommerce_id
-        ? parseInt(fila.woocommerce_id, 10)
-        : null,
-      numero_pedido: fila.numero_pedido
-        ? String(fila.numero_pedido).trim()
-        : null,
-    });
-
-    // 3. Obtener lector según extensión
-    let lector;
-    try {
-      lector = getLector(ext, filePath, limpiarFila);
-    } catch (error) {
-      await fs.promises.unlink(filePath);
-      return res.status(400).json({ error: error.message });
-    }
-
-    // 4. Procesar archivo en lotes
-    let totalFilas = 0;
-    let totalInsertados = 0;
-    let batch = [];
-
-    for await (const fila of lector) {
-      totalFilas++;
-
-      // Validación mínima: codigo + producto_id obligatorios
-      if (fila.codigo && fila.producto_id) {
-        batch.push(fila);
-
-        if (batch.length >= BATCH_SIZE) {
-          const resInsert = await insertarLote(batch);
-          totalInsertados += resInsert.affectedRows;
-          batch = [];
-        }
-      }
-    }
-
-    // Insertar último lote pendiente
-    if (batch.length) {
-      const resInsert = await insertarLote(batch);
-      totalInsertados += resInsert.affectedRows;
-    }
-
-    await fs.promises.unlink(filePath);
-
-    // 5. Respuesta final
-    res.json({
-      mensaje: "Carga completada",
-      total: totalFilas,
-      insertados: totalInsertados,
-      omitidos: totalFilas - totalInsertados,
-    });
-  } catch (err) {
-    console.error("❌ Error general en carga masiva:", err);
-    res.status(500).json({ error: "Error al procesar archivo" });
-  }
-};*/
-
 const { Readable } = require("stream");
 
 // 👉 asegúrate de tener estas funciones en tu proyecto:
 // - insertarLote(batch) → inserta en tu BD
 // - getLector() ya no se necesita porque lo hacemos aquí con buffer
-
+/*
 exports.cargaMasivaSeriales = async (req, res) => {
   try {
     // 1. Validar archivo
@@ -920,6 +694,126 @@ exports.cargaMasivaSeriales = async (req, res) => {
   } catch (err) {
     console.error("❌ Error general en carga masiva:", err);
     res.status(500).json({ error: "Error al procesar archivo" });
+  }
+};*/
+
+const { desbloquearProducto } = require("../models/controlAlertasStockModel");
+
+exports.cargaMasivaSeriales = async (req, res) => {
+  try {
+    // 1️⃣ Validar archivo
+    if (!req.file) {
+      return res.status(400).json({ error: "Archivo no proporcionado" });
+    }
+
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const BATCH_SIZE = 500;
+
+    // 2️⃣ Función para limpiar y validar fila
+    const limpiarFila = (fila) => ({
+      id_serial: fila.id_serial ? parseInt(fila.id_serial, 10) : null,
+      codigo: fila.codigo ? String(fila.codigo).trim() : null,
+      producto_id: fila.producto_id ? parseInt(fila.producto_id, 10) : null,
+      estado: fila.estado?.trim() || "disponible",
+      fecha_ingreso: fila.fecha_ingreso || new Date(),
+      observaciones: fila.observaciones?.trim() || "",
+      usuario_id: fila.usuario_id ? parseInt(fila.usuario_id, 10) : null,
+      woocommerce_id: fila.woocommerce_id ? parseInt(fila.woocommerce_id, 10) : null,
+      numero_pedido: fila.numero_pedido ? String(fila.numero_pedido).trim() : null,
+    });
+
+    // 3️⃣ Variables de control
+    let totalFilas = 0;
+    let totalInsertados = 0;
+    let batch = [];
+
+    // 🧩 Nuevo: conjunto para guardar productos actualizados
+    const productosActualizados = new Set();
+
+    // --- 📦 Procesar CSV ---
+    if (ext === ".csv") {
+      const stream = Readable.from(req.file.buffer.toString());
+
+      await new Promise((resolve, reject) => {
+        stream
+          .pipe(csv({ separator: ";" }))
+          .on("data", async (data) => {
+            totalFilas++;
+            const fila = limpiarFila(data);
+
+            if (fila.codigo && fila.producto_id) {
+              batch.push(fila);
+              productosActualizados.add(fila.producto_id);
+
+              if (batch.length >= BATCH_SIZE) {
+                const resInsert = await insertarLote(batch);
+                totalInsertados += resInsert.affectedRows;
+                batch = [];
+              }
+            }
+          })
+          .on("end", resolve)
+          .on("error", reject);
+      });
+
+      // --- 📦 Procesar XLSX ---
+    } else if (ext === ".xlsx") {
+      const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+      const hoja = workbook.Sheets[workbook.SheetNames[0]];
+      const datos = xlsx.utils.sheet_to_json(hoja);
+
+      for (const data of datos) {
+        totalFilas++;
+        const fila = limpiarFila(data);
+
+        if (fila.codigo && fila.producto_id) {
+          batch.push(fila);
+          productosActualizados.add(fila.producto_id);
+
+          if (batch.length >= BATCH_SIZE) {
+            const resInsert = await insertarLote(batch);
+            totalInsertados += resInsert.affectedRows;
+            batch = [];
+          }
+        }
+      }
+
+    } else {
+      return res.status(400).json({ error: "Formato de archivo no soportado" });
+    }
+
+    // 4️⃣ Insertar último lote pendiente
+    if (batch.length) {
+      const resInsert = await insertarLote(batch);
+      totalInsertados += resInsert.affectedRows;
+    }
+
+    // 5️⃣ Desbloquear productos afectados (si existen)
+    if (productosActualizados.size > 0) {
+      console.log(`🔁 Desbloqueando alertas para ${productosActualizados.size} productos actualizados...`);
+
+      for (const productoId of productosActualizados) {
+        try {
+          await desbloquearProducto(productoId);
+          console.log(`🔓 Producto ${productoId} desbloqueado (alertas reactivadas).`);
+        } catch (err) {
+          console.error(`⚠️ Error al desbloquear producto ${productoId}:`, err.message);
+        }
+      }
+    }
+
+    // 6️⃣ Respuesta final
+    res.json({
+      mensaje: "✅ Carga completada correctamente",
+      total_filas: totalFilas,
+      total_insertados: totalInsertados,
+      omitidos: totalFilas - totalInsertados,
+      productos_actualizados: Array.from(productosActualizados),
+    });
+
+  } catch (err) {
+    console.error("❌ Error general en carga masiva:", err);
+    res.status(500).json({ error: "Error al procesar archivo", detalles: err.message });
   }
 };
 

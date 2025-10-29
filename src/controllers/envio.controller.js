@@ -478,16 +478,16 @@ exports.createCotizacion = async (req, res) => {
       }
     }
     // 💸 Aplicar descuento (si existe)
-const totalConDescuento = descuentoPorcentaje > 0
-  ? Number((total - (total * (descuentoPorcentaje / 100))).toFixed(2))
-  : total;
+    const totalConDescuento = descuentoPorcentaje > 0
+      ? Number((total - (total * (descuentoPorcentaje / 100))).toFixed(2))
+      : total;
 
-  const montoDescuento = descuentoPorcentaje > 0
-  ? Number((total * (descuentoPorcentaje / 100)).toFixed(2))
-  : 0;
+      const montoDescuento = descuentoPorcentaje > 0
+      ? Number((total * (descuentoPorcentaje / 100)).toFixed(2))
+      : 0;
 
-console.log(`Total con descuento aplicado: ${totalConDescuento} (${descuentoPorcentaje}%)`);
-console.log(`Monto de descuento: ${montoDescuento}`);
+    console.log(`Total con descuento aplicado: ${totalConDescuento} (${descuentoPorcentaje}%)`);
+    console.log(`Monto de descuento: ${montoDescuento}`);
     // 🧾 Construir HTML básico con placeholders
     const cuerpo_html = plantilla.cuerpo_html || '';
     const asunto_correo = plantilla.asunto || 'Cotización';

@@ -706,6 +706,58 @@ async function procesarProductos(
           errProducto
         );
 
+        // 🚨 DETECTAR SI ES ERROR DE FALTA DE SERIALES Y ENCOLAR ALERTA
+        if (errProducto.statusCode === 404 && errProducto.message.includes('No hay serial válido')) {
+          console.log('🚨 Detectado error de falta de seriales, encolando alerta...');
+          
+          try {
+            // 📊 Obtener configuración SMTP
+            const smtpConfig = await obtenerSMTPConfig(wooId);
+            
+            if (smtpConfig) {
+              // 📦 Preparar datos de la alerta
+              const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
+              
+              const jobData = {
+                wooId,
+                numero_pedido,
+                nombre_cliente: nombre_cliente || 'Cliente no especificado',
+                email_cliente: email_cliente || null,
+                productos_faltantes: [{
+                  producto_id,
+                  woo_producto_id,
+                  nombre_producto: nombre_producto || `Producto ID: ${producto_id}`,
+                  cantidad_solicitada: cantidad,
+                  cantidad_asignada: serialesAsignados.length,
+                  cantidad_faltante: cantidad - serialesAsignados.length
+                }],
+                fecha_fallo: new Date(),
+                intentos: 1,
+                empresaName: empresaName || await getEmpresaNameById(empresa_id),
+                smtpConfig,
+                email_destinatario: ['alertas@miempresa.com'] // Configura según tu caso
+              };
+
+              // 📬 Encolar job de alerta
+              const job = await alertaPedidoQueue.add(jobData, {
+                attempts: 3,
+                removeOnComplete: true,
+                removeOnFail: false,
+                priority: 1,
+                jobId: `alerta-falta-seriales-${numero_pedido}-${woo_producto_id}-${Date.now()}`
+              });
+
+              console.log(`📨 Alerta de falta de seriales encolada (Job ID: ${job.id})`);
+            } else {
+              console.warn('⚠️ No se encontró SMTP config, no se enviará alerta');
+            }
+          } catch (alertError) {
+            console.error('❌ Error encolando alerta de falta de seriales:', alertError);
+            // No re-lanzamos el error para no interrumpir el flujo principal
+          }
+        }
+
+        // 🔄 Rollback de seriales ya asignados
         if (serialesAsignados.length > 0) {
           await revertirSeriales(
             [{ producto_id, seriales: serialesAsignados }],
