@@ -9,7 +9,6 @@ module.exports = async function alertaFaltaSerialesProcessor(job) {
     const {
       smtpConfig,
       numero_pedido,
-      nombre_cliente,
       productos_faltantes, // [{nombre, cantidad_faltante, producto_id}]
       fecha_fallo,
       intentos,
@@ -37,7 +36,6 @@ module.exports = async function alertaFaltaSerialesProcessor(job) {
         
         <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
           <p><strong>📦 Pedido:</strong> #${numero_pedido}</p>
-          <p><strong>👤 Cliente:</strong> ${nombre_cliente}</p>
           <p><strong>⏰ Hora del fallo:</strong> ${new Date(fecha_fallo).toLocaleString('es-CL')}</p>
           <p><strong>🔄 Intentos:</strong> ${intentos}</p>
         </div>
