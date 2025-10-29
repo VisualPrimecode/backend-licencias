@@ -595,7 +595,9 @@ async function procesarProductos(
   usuario_id,
   numero_pedido,
   registrarEnvioError,
-  currency
+  currency,
+  datosAdicionales = {} // 🆕 NUEVO PARÁMETRO
+
 ) {
   const productosProcesados = [];
   let productosExtrasProcesados = [];
@@ -1031,7 +1033,12 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       empresa_id,
       usuario_id,
       numero_pedido,
-      registrarEnvioError
+      registrarEnvioError,
+       {
+    nombre_cliente,
+    email_cliente,
+    empresaName
+  }
     );
     
     // 7. Construcción del objeto envío
