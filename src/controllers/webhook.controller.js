@@ -723,8 +723,6 @@ async function procesarProductos(
               const jobData = {
                 wooId,
                 numero_pedido,
-                nombre_cliente: nombre_cliente || 'Cliente no especificado',
-                email_cliente: email_cliente || null,
                 productos_faltantes: [{
                   producto_id,
                   woo_producto_id,
@@ -1034,11 +1032,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       usuario_id,
       numero_pedido,
       registrarEnvioError,
-       {
-    nombre_cliente,
-    email_cliente,
-    empresaName
-  }
+      
     );
     
     // 7. Construcción del objeto envío
