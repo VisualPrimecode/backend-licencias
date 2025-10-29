@@ -735,7 +735,7 @@ async function procesarProductos(
                 intentos: 1,
                 empresaName: empresaName || await getEmpresaNameById(empresa_id),
                 smtpConfig,
-                email_destinatario: ['alertas@miempresa.com'] // Configura según tu caso
+                email_destinatario: ['claudiorodriguez7778@gmail.com'] // Configura según tu caso
               };
 
               // 📬 Encolar job de alerta
