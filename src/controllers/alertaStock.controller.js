@@ -35,7 +35,9 @@ const productosExcluidos = new Set([
   '371', //win 11 pro
   '343',//eset internet security
   '428',//Windows 11 Pro + Office 2021 Pro
-  '386',
+  '386',//office 2024 reinstalable
+  '406',//office mac 2019
+  '393',//visio 2021
 ]);
 
 // 🔹 Filtrar productos con riesgo o bajo stock, excluyendo los de la lista

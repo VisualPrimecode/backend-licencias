@@ -750,7 +750,7 @@ async function procesarProductos(
                   fecha_fallo: new Date(),
                   intentos: 1,
                   smtpConfig,
-                  email_destinatario: ['claudiorodriguez7778@gmail.com']
+                  email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl']
                 };
 
                 // 📬 Encolar job de alerta

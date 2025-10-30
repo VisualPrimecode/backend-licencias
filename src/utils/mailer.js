@@ -65,7 +65,7 @@ const sendEnvioCorreo = async ({ smtpConfig, to, subject, text, html, nombreEmpr
   const transporter = await createTransporter(smtpConfig);
 
   const mailOptions = {
-    from: `"${nombreEmpresa || 'Mi Empresas'}" <${smtpConfig.user}>`,
+    from: `"${nombreEmpresa || 'Servidor Web'}" <${smtpConfig.user}>`,
     to,
     subject,
     text,
