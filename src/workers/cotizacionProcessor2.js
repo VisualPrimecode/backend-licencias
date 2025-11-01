@@ -98,6 +98,24 @@ module.exports = async function cotizacionProcessor(job) {
         </tr>
       `;
     }
+    // 💳 Determinar si se deben incluir los datos de transferencia
+let datosTransferencia = '';
+
+if (!cotizacion.monedaDestino || cotizacion.monedaDestino === 'CLP') {
+  // Solo incluir si es CLP o está vacío (equivale a CLP)
+  datosTransferencia = plantilla.datos_transferencia || `
+    <p><strong>Datos de transferencia:</strong><br>
+    Banco Ejemplo S.A.<br>
+    Cuenta Corriente: 123456789<br>
+    Titular: Empresa XYZ Ltda.<br>
+    RUT: 76.543.210-K<br>
+    Email: pagos@empresa.cl</p>
+  `;
+} else {
+  console.log(`🌐 Cotización en moneda extranjera (${cotizacion.monedaDestino}) — se omiten datos de transferencia`);
+  datosTransferencia = ''; // o podrías poner un texto alternativo si lo deseas
+}
+
 
     // 🧠 Reemplazar placeholders en plantilla
     let htmlContent = plantilla.cuerpo_html || '';
@@ -113,6 +131,17 @@ module.exports = async function cotizacionProcessor(job) {
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
       .replace(/{{validez_texto}}/g, plantilla.validez_texto || '')
       .replace(/{{bloque_descuento}}/g, bloqueDescuento); // 👈 bloque dinámico insertado aquí
+      // 🏦 Ocultar datos de transferencia si la moneda no es CLP o está vacía
+const monedaNormalizada = (cotizacion.monedaDestino || '').trim().toUpperCase();
+if (monedaNormalizada && monedaNormalizada !== 'CLP') {
+  console.log(`🌍 Cotización internacional (${monedaNormalizada}) → ocultando bloque de transferencia`);
+  // Elimina el bloque de transferencia (cualquier contenido entre <div id="bloque-transferencia">...</div>)
+  htmlContent = htmlContent.replace(
+    /<div[^>]*id=["']bloque-transferencia["'][^>]*>[\s\S]*?<\/div>/gi,
+    ''
+  );
+}
+
 
     // ✉️ Asunto con reemplazos
     const subject = (plantilla.asunto || 'Tu cotización')
