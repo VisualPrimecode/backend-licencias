@@ -588,310 +588,152 @@ async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id,
   return productosExtrasProcesados;
 }
 
-async function procesarProductos(
-  lineItems,
-  wooId,
-  empresa_id,
-  usuario_id,
-  numero_pedido,
-  registrarEnvioError,
-  currency,
-  datosAdicionales = {} // 🆕 NUEVO PARÁMETRO
 
+
+
+
+
+
+
+
+
+async function procesarProductos(
+  lineItems, wooId, empresa_id, usuario_id, numero_pedido,
+  registrarEnvioError, currency
 ) {
   const productosProcesados = [];
   let productosExtrasProcesados = [];
 
-  // 1️⃣ Validar que haya productos
+  // 🧩 1️⃣ Validar productos
   if (!Array.isArray(lineItems) || lineItems.length === 0) {
     await registrarEnvioError({
-      empresa_id,
-      usuario_id,
-      numero_pedido,
+      empresa_id, usuario_id, numero_pedido,
       motivo_error: 'SIN_PRODUCTOS',
       detalles_error: 'El pedido no contiene productos en el payload recibido',
     });
-    const err = new Error('El pedido no contiene productos.');
-    err.statusCode = 400;
-    throw err;
+    throw Object.assign(new Error('El pedido no contiene productos.'), { statusCode: 400 });
   }
 
-  // 2️⃣ Validar precios si corresponde
-  await validarPreciosProductos(
-    lineItems,
-    currency,
-    registrarEnvioError,
-    empresa_id,
-    usuario_id,
-    numero_pedido
-  );
+  // 💰 2️⃣ Validar precios
+  await validarPreciosProductos(lineItems, currency, registrarEnvioError, empresa_id, usuario_id, numero_pedido);
 
   try {
-    // 3️⃣ Iterar productos del pedido (productos principales)
+    // 🔁 3️⃣ Procesar productos principales
     for (const item of lineItems) {
-      const woo_producto_id = item.product_id;
-      const nombre_producto = item.name || null;
-      const cantidad = item.quantity || 1;
-
-      // 3.1 Verificar mapeo
-      const producto_id = await WooProductMapping.getProductoInternoId(
-        wooId,
-        woo_producto_id
-      );
+      const { product_id: woo_producto_id, name: nombre_producto = null, quantity: cantidad = 1 } = item;
+      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
 
       if (!producto_id) {
         await registrarEnvioError({
-          empresa_id,
-          usuario_id,
-          numero_pedido,
+          empresa_id, usuario_id, numero_pedido,
           motivo_error: 'PRODUCTO_NO_MAPEADO',
           detalles_error: `Woo product ID: ${woo_producto_id}`,
         });
-        const err = new Error(
-          `Producto WooCommerce ${woo_producto_id} no mapeado en sistema interno`
-        );
-        err.statusCode = 404;
-        throw err;
+        throw Object.assign(new Error(`Producto WooCommerce ${woo_producto_id} no mapeado`), { statusCode: 404 });
       }
-
-      // -------------------------------
-      // 🚩 Seriales de este producto
-      const serialesAsignados = [];
 
       try {
-        // 3.2 Asignar seriales del producto
-        for (let i = 0; i < cantidad; i++) {
-          const serial = await Serial.obtenerSerialDisponible2(
-            producto_id,
-            wooId,
-            numero_pedido
-          );
-
-          if (!serial || !serial.id || !serial.codigo) {
-            const err = new Error(
-              `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
-            );
-            err.statusCode = 404;
-            throw err;
-          }
-
-          serialesAsignados.push({
-            id_serial: serial.id,
-            codigo: serial.codigo,
-          });
-        }
-
-        console.log(
-          `✅ Seriales asignados para producto ${nombre_producto || producto_id}:`,
-          serialesAsignados
+        // 🔢 Seriales
+        const serialesAsignados = await Promise.all(
+          Array.from({ length: cantidad }, async (_, i) => {
+            const s = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
+            if (!s?.id || !s?.codigo)
+              throw Object.assign(new Error(`No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`), { statusCode: 404 });
+            return { id_serial: s.id, codigo: s.codigo };
+          })
         );
 
-        // 3.3 Obtener plantilla asociada
-        const plantilla = await getPlantillaConFallback(
-          producto_id,
-          wooId,
-          empresa_id
-        );
-
-        // 3.4 Confirmar producto
-        productosProcesados.push({
-          producto_id,
-          woo_producto_id,
-          nombre_producto,
-          plantilla,
-          seriales: serialesAsignados,
-        });
-      } catch (errProducto) {
-        // ❌ Fallo durante asignación de este producto
-        console.error(
-          `❌ Error asignando seriales para producto ${woo_producto_id}, iniciando rollback parcial...`,
-          errProducto
-        );
-
-        // 🚨 DETECTAR SI ES ERROR DE FALTA DE SERIALES Y ENCOLAR ALERTA
-        if (errProducto.statusCode === 404 && errProducto.message.includes('No hay serial válido')) {
-          console.log('🚨 Detectado error de falta de seriales...');
-          
-          try {
-            // 📊 Importar modelo de control
-            const {
-              crearControlSiNoExiste,
-              estaBloqueado,
-              bloquearProducto
-            } = require('../models/controlAlertasStockModel');
-
-            // 1️⃣ Crear control si no existe (max_alertas = 1 para falta de seriales)
-            await crearControlSiNoExiste(producto_id, 1);
-
-            // 2️⃣ Verificar si ya se envió alerta previamente
-            const bloqueado = await estaBloqueado(producto_id);
-
-            if (bloqueado) {
-              console.log(`⏭️ Producto ${producto_id} (${nombre_producto}) ya tiene alerta activa. No se enviará duplicada.`);
-            } else {
-              // 3️⃣ Obtener configuración SMTP
-              const smtpConfig = await obtenerSMTPConfig(wooId);
-              
-              if (smtpConfig) {
-                // 📦 Preparar datos de la alerta
-                const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
-                
-                const jobData = {
-                  wooId,
-                  numero_pedido,
-                  productos_faltantes: [{
-                    producto_id,
-                    woo_producto_id,
-                    nombre_producto: nombre_producto || `Producto ID: ${producto_id}`,
-                    cantidad_solicitada: cantidad,
-                    cantidad_asignada: serialesAsignados.length,
-                    cantidad_faltante: cantidad - serialesAsignados.length
-                  }],
-                  fecha_fallo: new Date(),
-                  intentos: 1,
-                  smtpConfig,
-                  email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl']
-                };
-
-                // 📬 Encolar job de alerta
-                const job = await alertaPedidoQueue.add(jobData, {
-                  attempts: 3,
-                  removeOnComplete: true,
-                  removeOnFail: false,
-                  priority: 1,
-                  jobId: `alerta-falta-seriales-${numero_pedido}-${woo_producto_id}-${Date.now()}`
-                });
-
-                console.log(`📨 Alerta de falta de seriales encolada (Job ID: ${job.id})`);
-
-                // 4️⃣ Bloquear producto para evitar alertas duplicadas
-                await bloquearProducto(
-                  producto_id, 
-                  `Alerta enviada para pedido ${numero_pedido}. Esperando reposición de stock.`
-                );
-                console.log(`🔒 Producto ${producto_id} bloqueado hasta reposición de seriales.`);
-
-              } else {
-                console.warn('⚠️ No se encontró SMTP config, no se enviará alerta');
-              }
-            }
-          } catch (alertError) {
-            console.error('❌ Error procesando alerta de falta de seriales:', alertError);
-            // No re-lanzamos el error para no interrumpir el flujo principal
-          }
-        }
-
-        // 🔄 Rollback de seriales ya asignados
-        if (serialesAsignados.length > 0) {
-          await revertirSeriales(
-            [{ producto_id, seriales: serialesAsignados }],
-            wooId
-          );
-          console.log(
-            `↩️ Rollback completado para producto ${woo_producto_id}`
-          );
-        }
-
-        throw errProducto; // re-lanzamos para manejar más arriba
+        const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+        productosProcesados.push({ producto_id, woo_producto_id, nombre_producto, plantilla, seriales: serialesAsignados });
+      } catch (err) {
+        await manejarErrorProducto(err, { producto_id, woo_producto_id, nombre_producto, cantidad, serialesAsignados: [], numero_pedido, wooId });
+        throw err;
       }
     }
 
-// 4️⃣ Procesar productos "Compra Con" (productos extra opcionales)
-let extraOptions = [];
-
-try {
-  console.log("🧩 Iniciando detección de productos extra 'Compra Con'...");
-
-  // Detectamos si el pedido viene desde WooCommerce (webhook)
-  // Si los lineItems tienen 'meta_data' con '_tmcartepo_data', asumimos webhook Woo
-  const esWebhookWoo = Array.isArray(lineItems) && lineItems.some(item =>
-    Array.isArray(item.meta_data) &&
-    item.meta_data.some(m => m.key === "_tmcartepo_data")
-  );
-
-  for (const [index, item] of lineItems.entries()) {
-    console.log(`📦 Analizando producto [${index}] → ${item.name || item.product_id}`);
-
-    let extrasEncontrados = [];
-
-    if (esWebhookWoo) {
-      // 🔹 CASO: WEBHOOK DE WOO (datos en meta_data)
-      const metaExtra = item.meta_data?.find(m => m.key === "_tmcartepo_data");
-
-      if (metaExtra && Array.isArray(metaExtra.value)) {
-        extrasEncontrados = metaExtra.value.filter(opt =>
-          typeof opt.name === "string" && opt.name.toLowerCase().includes("compra con")
-        );
-      }
-
-      if (extrasEncontrados.length > 0) {
-        console.log(`🛒 [WEBHOOK] ${extrasEncontrados.length} extras 'Compra Con' encontrados en ${item.name}`);
-      }
-    } else {
-      // 🔹 CASO: PEDIDO INTERNO / NO WOO (datos en extra_options)
-      if (Array.isArray(item.extra_options)) {
-        extrasEncontrados = item.extra_options.filter(opt =>
-          typeof opt.name === "string" && opt.name.toLowerCase().includes("compra con")
-        );
-        if (extrasEncontrados.length > 0) {
-          console.log(`🛒 [INTERNO] ${extrasEncontrados.length} extras 'Compra Con' encontrados en ${item.name}`);
-        }
-      }
+    // 🧩 4️⃣ Procesar productos "Compra Con"
+    const extraOptions = detectarProductosExtra(lineItems);
+    if (extraOptions.length) {
+      productosExtrasProcesados = await procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id, numero_pedido);
     }
 
-    // Si encontramos extras, los agregamos al array principal
-    if (extrasEncontrados.length > 0) {
-      extraOptions.push(...extrasEncontrados);
-    }
-  }
-
-  if (extraOptions.length === 0) {
-    console.log("ℹ️ No se detectaron productos extra 'Compra Con' en este pedido.");
-  } else {
-    console.log(`✅ Total extras detectados: ${extraOptions.length}`);
-  }
-
-} catch (errExtra) {
-  console.error("❌ Error al inspeccionar productos extra (Compra Con):", errExtra);
-  extraOptions = [];
-}
-
-// 4.1️⃣ Si hay extras, procesarlos automáticamente
-if (extraOptions.length > 0) {
-  try {
-    console.log("🚀 Procesando productos extra (Compra Con)...");
-    productosExtrasProcesados = await procesarProductosExtraAutomatico(
-      extraOptions,
-      wooId,
-      empresa_id,
-      numero_pedido
-    );
-  } catch (errProcesarExtras) {
-    console.error("❌ Error procesando productos extra (Compra Con):", errProcesarExtras);
-    throw errProcesarExtras;
-  }
-}
-
-      
-
-    // 5️⃣ Combinar todos los productos (principales + extras)
-    const todosLosProductos = [...productosProcesados, ...productosExtrasProcesados];
-
-    console.log(`✅ Total productos procesados (incluyendo extras): ${todosLosProductos.length}`);
-    return todosLosProductos;
+    // ✅ 5️⃣ Resultado final
+    const todos = [...productosProcesados, ...productosExtrasProcesados];
+    console.log(`✅ Total productos procesados: ${todos.length}`);
+    return todos;
 
   } catch (error) {
-    // 🔄 Rollback global (productos + extras)
+    // 🔄 Rollback global
     const todosAsignados = [...productosProcesados, ...productosExtrasProcesados];
     if (todosAsignados.length > 0) {
-      console.log('⚠️ Error global, revirtiendo todos los seriales (productos + extras)...');
+      console.log('⚠️ Error global, revirtiendo seriales...');
       await revertirSeriales(todosAsignados, wooId);
-      console.log('↩️ Rollback global completado');
     }
-
     throw error;
   }
 }
+
+/* -----------------------------------------
+   🔧 FUNCIONES AUXILIARES SIMPLIFICADAS
+------------------------------------------*/
+
+// Detección de extras "Compra Con"
+function detectarProductosExtra(lineItems = []) {
+  const esWebhookWoo = lineItems.some(i => i.meta_data?.some(m => m.key === "_tmcartepo_data"));
+  const extras = [];
+
+  for (const item of lineItems) {
+    const fuente = esWebhookWoo
+      ? item.meta_data?.find(m => m.key === "_tmcartepo_data")?.value
+      : item.extra_options;
+    const encontrados = (fuente || []).filter(o => o.name?.toLowerCase().includes("compra con"));
+    extras.push(...encontrados);
+  }
+  console.log(`🛒 Extras 'Compra Con' detectados: ${extras.length}`);
+  return extras;
+}
+
+// Manejo y alerta ante error de seriales
+async function manejarErrorProducto(err, { producto_id, woo_producto_id, nombre_producto, cantidad, serialesAsignados, numero_pedido, wooId }) {
+  console.error(`❌ Error en producto ${woo_producto_id}:`, err);
+
+  if (err.statusCode === 404 && err.message.includes('No hay serial válido')) {
+    try {
+      const { crearControlSiNoExiste, estaBloqueado, bloquearProducto } = require('../models/controlAlertasStockModel');
+      await crearControlSiNoExiste(producto_id, 1);
+
+      if (!(await estaBloqueado(producto_id))) {
+        const smtp = await obtenerSMTPConfig(wooId);
+        if (smtp) {
+          const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
+          await alertaPedidoQueue.add({
+            wooId,
+            numero_pedido,
+            productos_faltantes: [{
+              producto_id, woo_producto_id, nombre_producto,
+              cantidad_solicitada: cantidad,
+              cantidad_asignada: serialesAsignados.length,
+              cantidad_faltante: cantidad - serialesAsignados.length
+            }],
+            fecha_fallo: new Date(),
+            intentos: 1,
+            smtpConfig: smtp,
+            email_destinatario: ['claudiorodriguez7778@gmail.com','cleon@cloudi.cl','dtorres@cloudi.cl']
+          }, { attempts: 3, removeOnComplete: true, priority: 1 });
+          await bloquearProducto(producto_id, `Alerta enviada para pedido ${numero_pedido}. Esperando reposición.`);
+        } else console.warn('⚠️ No se encontró configuración SMTP.');
+      }
+    } catch (alertError) {
+      console.error('❌ Error procesando alerta de seriales:', alertError);
+    }
+  }
+
+  if (serialesAsignados?.length) {
+    await revertirSeriales([{ producto_id, seriales: serialesAsignados }], wooId);
+    console.log(`↩️ Rollback de seriales completado para producto ${woo_producto_id}`);
+  }
+}
+
 
 async function getPlantillaConFallback(producto_id, woo_id) {
   const plantilla = await Plantilla.getPlantillaByIdProductoWoo(producto_id, woo_id);
