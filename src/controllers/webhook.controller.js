@@ -587,16 +587,7 @@ async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id,
 
   return productosExtrasProcesados;
 }
-
-
-
-
-
-
-
-
-
-
+/*
 async function procesarProductos(
   lineItems, wooId, empresa_id, usuario_id, numero_pedido,
   registrarEnvioError, currency
@@ -671,7 +662,145 @@ async function procesarProductos(
     }
     throw error;
   }
+}*/
+async function procesarProductos(
+  lineItems,
+  wooId,
+  empresa_id,
+  usuario_id,
+  numero_pedido,
+  registrarEnvioError,
+  currency
+) {
+
+  const productosProcesados = [];
+  const erroresDetectados = [];
+  let productosExtrasProcesados = [];
+
+  // 🧩 1️⃣ Validar entrada
+  if (!Array.isArray(lineItems) || lineItems.length === 0) {
+    await registrarEnvioError({
+      empresa_id, usuario_id, numero_pedido,
+      motivo_error: 'SIN_PRODUCTOS',
+      detalles_error: 'El pedido no contiene productos en el payload recibido',
+    });
+    throw Object.assign(new Error('El pedido no contiene productos.'), { statusCode: 400 });
+  }
+
+  // 💰 2️⃣ Validar precios
+  await validarPreciosProductos(lineItems, currency, registrarEnvioError, empresa_id, usuario_id, numero_pedido);
+
+  // 🚀 3️⃣ Procesar productos principales
+  for (const item of lineItems) {
+
+    const {
+      product_id: woo_producto_id,
+      name: nombre_producto = null,
+      quantity: cantidad = 1
+    } = item;
+
+    let serialesAsignados = [];
+
+    try {
+      // 🔍 Obtener ID interno
+      const producto_id = await WooProductMapping.getProductoInternoId(wooId, woo_producto_id);
+      if (!producto_id) {
+        throw Object.assign(
+          new Error(`Producto WooCommerce ${woo_producto_id} no mapeado`),
+          { statusCode: 404 }
+        );
+      }
+
+      console.log(`📦 Procesando producto ${nombre_producto} (${woo_producto_id}) - Cantidad: ${cantidad}`);
+
+      // 🔢 3.1 ASIGNACIÓN SECURE DE SERIALES (NO Promise.all)
+      for (let i = 0; i < cantidad; i++) {
+        const s = await Serial.obtenerSerialDisponible2(producto_id, wooId, numero_pedido);
+
+        if (!s?.id || !s?.codigo) {
+          // ❗Error crítico: no hay serial para esta unidad
+          throw Object.assign(
+            new Error(
+              `No hay serial válido para la unidad ${i + 1} del producto ${nombre_producto || producto_id}`
+            ),
+            { statusCode: 404, serialesAsignados }
+          );
+        }
+
+        serialesAsignados.push({
+          id_serial: s.id,
+          codigo: s.codigo
+        });
+      }
+
+      // 🧩 3.2 Obtener plantilla
+      const plantilla = await getPlantillaConFallback(producto_id, wooId, empresa_id);
+
+      // 🟢 3.3 Producto procesado correctamente
+      productosProcesados.push({
+        producto_id,
+        woo_producto_id,
+        nombre_producto,
+        plantilla,
+        seriales: serialesAsignados
+      });
+
+      console.log(`✅ Producto ${woo_producto_id} procesado con ${serialesAsignados.length} serial(es)`);
+
+    } catch (err) {
+
+      // ⚠️ Recuperamos seriales parciales si vienen dentro del error
+      const serialesFallidos = err.serialesAsignados || serialesAsignados || [];
+
+      console.warn(`⚠️ Error procesando producto ${woo_producto_id}:`, err.message);
+
+      const errorProducto = await manejarErrorProducto(err, {
+        producto_id: item.product_id,
+        woo_producto_id,
+        nombre_producto,
+        cantidad,
+        serialesAsignados: serialesFallidos,   // 👈 AHORA SÍ pasan los seriales reales
+        numero_pedido,
+        wooId
+      });
+
+      erroresDetectados.push(errorProducto);
+
+      // ⚠️ No re-lanzamos error para continuar con otros productos
+    }
+  }
+
+  // 🧩 4️⃣ Procesar productos "Compra Con"
+  try {
+    const extraOptions = detectarProductosExtra(lineItems);
+    if (extraOptions.length) {
+      productosExtrasProcesados = await procesarProductosExtraAutomatico(
+        extraOptions,
+        wooId,
+        empresa_id,
+        numero_pedido
+      );
+    }
+  } catch (errExtras) {
+    console.warn('⚠️ Error procesando productos extra:', errExtras.message);
+  }
+
+  // 🧮 5️⃣ Consolidar resultados
+  const todosProcesados = [...productosProcesados, ...productosExtrasProcesados];
+  const totalProductos = todosProcesados.length + erroresDetectados.length;
+
+  console.log(
+    `🧾 Resumen procesamiento → OK: ${todosProcesados.length}, Error: ${erroresDetectados.length}, Total: ${totalProductos}`
+  );
+
+  // 🔙 6️⃣ Retornar resultado final
+  return {
+    productosProcesados: todosProcesados,
+    erroresDetectados
+  };
 }
+
+
 
 /* -----------------------------------------
    🔧 FUNCIONES AUXILIARES SIMPLIFICADAS
@@ -692,7 +821,7 @@ function detectarProductosExtra(lineItems = []) {
   console.log(`🛒 Extras 'Compra Con' detectados: ${extras.length}`);
   return extras;
 }
-
+/*
 // Manejo y alerta ante error de seriales
 async function manejarErrorProducto(err, { producto_id, woo_producto_id, nombre_producto, cantidad, serialesAsignados, numero_pedido, wooId }) {
   console.error(`❌ Error en producto ${woo_producto_id}:`, err);
@@ -732,6 +861,60 @@ async function manejarErrorProducto(err, { producto_id, woo_producto_id, nombre_
     await revertirSeriales([{ producto_id, seriales: serialesAsignados }], wooId);
     console.log(`↩️ Rollback de seriales completado para producto ${woo_producto_id}`);
   }
+}
+*/
+async function manejarErrorProducto(err, contexto) {
+  const {
+    producto_id,
+    woo_producto_id,
+    nombre_producto,
+    cantidad,
+    serialesAsignados = [],
+    numero_pedido,
+    wooId
+  } = contexto;
+
+  console.error(`❌ Error en producto ${woo_producto_id} (${nombre_producto}):`, err);
+
+  // 🧱 1️⃣ Definir estructura de reporte
+  const errorInfo = {
+    producto_id,
+    woo_producto_id,
+    nombre_producto,
+    cantidad_solicitada: cantidad,
+    cantidad_asignada: serialesAsignados.length,
+    cantidad_faltante: Math.max(cantidad - serialesAsignados.length, 0),
+    motivo_error: 'ERROR_PRODUCTO',
+    mensaje_error: err.message,
+    fecha_fallo: new Date(),
+    numero_pedido,
+    wooId
+  };
+
+  try {
+    // 🧩 2️⃣ Caso especial: sin serial válido
+    if (err.statusCode === 404 && err.message.includes('No hay serial válido')) {
+      const { crearControlSiNoExiste } = require('../models/controlAlertasStockModel');
+      await crearControlSiNoExiste(producto_id, 1);
+      errorInfo.motivo_error = 'SIN_SERIAL_VALIDO';
+    }
+  } catch (controlErr) {
+    console.warn('⚠️ Error registrando control de stock:', controlErr.message);
+  }
+
+  try {
+    // 🔄 3️⃣ Rollback de seriales (si corresponde)
+    if (serialesAsignados?.length > 0) {
+      await revertirSeriales([{ producto_id, seriales: serialesAsignados }], wooId);
+      console.log(`↩️ Rollback completado para producto ${woo_producto_id}`);
+    }
+  } catch (rollbackErr) {
+    console.error('⚠️ Error durante rollback de seriales:', rollbackErr.message);
+    errorInfo.rollback_error = rollbackErr.message;
+  }
+
+  // 🪄 4️⃣ Devolver información estructurada del error
+  return errorInfo;
 }
 
 
@@ -826,7 +1009,7 @@ async function validarPreciosProductos(lineItems, currency, registrarEnvioError,
 }
 
 const PedidosLock = require('../models/pedidosLock.model');
-
+/*
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
   try {
@@ -1010,7 +1193,160 @@ try {
     console.error(`❌ Error procesando pedido ${data.number}:`, error);
     throw error;
   }
+}*/
+async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
+  const numero_pedido = data.number || data.id;
+
+  try {
+    await validarPedidoWebhook(data, wooId, registrarEnvioError);
+  } catch (error) {
+    await registrarEnvioError({
+      woo_config_id: wooId,
+      numero_pedido,
+      motivo_error: 'ERROR_PROCESAR_PEDIDO',
+      detalles_error: error.stack || error.message
+    });
+    console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
+    throw error;
+  }
+
+  // 🔒 0️⃣ Intentar adquirir lock
+  const lockAdquirido = await PedidosLock.adquirirLock(wooId, numero_pedido);
+  if (!lockAdquirido) {
+    const err = new Error(`Pedido ${numero_pedido} ya está en proceso`);
+    err.isIgnored = true;
+    err.statusCode = 202;
+    throw err;
+  }
+
+  try {
+    // 1️⃣ Obtener datos de empresa y usuario
+    const empresaUsuario = await obtenerEmpresaYUsuario(wooId, numero_pedido, registrarEnvioError);
+    if (!empresaUsuario) {
+      throw new Error(`No se encontró empresa/usuario para wooId ${wooId}, pedido ${numero_pedido}`);
+    }
+
+    const empresa_id = empresaUsuario.id;
+    const usuario_id = empresaUsuario.usuario_id;
+
+    // 2️⃣ Datos del cliente
+    const billing = data.billing || {};
+    const nombre_cliente = (
+      `${billing.first_name || ''} ${billing.last_name || ''}`.trim() ||
+      data.customer_name || ''
+    );
+    const email_cliente = billing.email || data.customer_email || null;
+    const fecha_envio = data.date_paid || new Date();
+
+    // 3️⃣ Evitar duplicados
+    await verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, registrarEnvioError);
+
+    // 4️⃣ Obtener nombre de empresa
+    const empresaName = await getEmpresaNameById(empresa_id);
+
+    // 5️⃣ Procesar productos y capturar errores
+    const productosRaw = data.line_items || data.products || [];
+    const { productosProcesados, erroresDetectados } = await procesarProductos(
+      productosRaw,
+      wooId,
+      empresa_id,
+      usuario_id,
+      numero_pedido,
+      registrarEnvioError,
+      data.currency
+    );
+
+    // 6️⃣ Registrar envío en BD si hay productos válidos
+    let envioId = null;
+    if (productosProcesados.length > 0) {
+      const envioData = {
+        empresa_id,
+        usuario_id,
+        nombre_cliente,
+        email_cliente,
+        numero_pedido,
+        estado: 'pendiente',
+        fecha_envio: formatFechaMySQL(fecha_envio),
+        woocommerce_id: wooId,
+        woo_idproduct: null
+      };
+
+      const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
+      if (!smtpConfig) throw new Error('No se encontró configuración SMTP activa');
+
+      envioId = await Envio.createEnvio(envioData);
+
+      console.log(`📦 Pedido ${numero_pedido}: encolando ${productosProcesados.length} productos procesados`);
+      await encolarEnvio(
+        envioId,
+        { ...envioData, productos: productosProcesados, empresaName },
+        smtpConfig,
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        registrarEnvioError
+      );
+    }
+
+    // 7️⃣ Alerta consolidada si hubo errores
+    if (erroresDetectados.length > 0) {
+      console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Enviando alerta consolidada...`);
+      const smtp = await obtenerSMTPConfig(wooId);
+      if (smtp) {
+        const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
+        await alertaPedidoQueue.add({
+          wooId,
+          numero_pedido,
+          empresa_id,
+          productos_afectados: erroresDetectados,
+          total_productos_fallidos: erroresDetectados.length,
+          total_productos_ok: productosProcesados.length,
+          fecha_fallo: new Date(),
+          smtpConfig: smtp,
+          email_destinatario: [
+            'claudiorodriguez7778@gmail.com',
+            'cleon@cloudi.cl',
+            'dtorres@cloudi.cl'
+          ]
+        }, { attempts: 3, removeOnComplete: true, priority: 1 });
+
+        // 🧱 Opcional: bloquear productos con fallos
+        const { bloquearProducto } = require('../models/controlAlertasStockModel');
+        for (const err of erroresDetectados) {
+          try {
+            await bloquearProducto(err.producto_id, `Pedido ${numero_pedido} en alerta. Esperando reposición.`);
+          } catch (e) {
+            console.warn(`⚠️ No se pudo bloquear producto ${err.producto_id}:`, e.message);
+          }
+        }
+      } else {
+        console.warn('⚠️ No se encontró configuración SMTP para enviar alerta de pedido.');
+      }
+    }
+
+    // 8️⃣ Liberar lock (éxito o parcial)
+    await PedidosLock.liberarLock(wooId, numero_pedido, 'completed');
+
+    // 9️⃣ Retornar resultado final
+    return {
+      envioId,
+      productosProcesados: productosProcesados.length,
+      erroresDetectados: erroresDetectados.length
+    };
+
+  } catch (error) {
+    await PedidosLock.liberarLock(wooId, numero_pedido, 'failed');
+    await registrarEnvioError({
+      woo_config_id: wooId,
+      numero_pedido,
+      motivo_error: 'ERROR_PROCESAR_PEDIDO',
+      detalles_error: error.stack || error.message
+    });
+    console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
+    throw error;
+  }
 }
+
 
 exports.pedidoCompletado = async (req, res) => {
   console.log('🔔 Webhook recibido: nuevo cambio de estado en un pedido');
