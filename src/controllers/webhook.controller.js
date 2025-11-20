@@ -1194,6 +1194,18 @@ try {
     throw error;
   }
 }*/
+ function formatFechaMySQL(dateInput = new Date()) {
+  const date = (dateInput instanceof Date)
+    ? dateInput
+    : new Date(dateInput); // si viene string, lo convierte
+
+  if (isNaN(date.getTime())) {
+    // fallback si la fecha no es válida
+    return new Date().toISOString().slice(0, 19).replace('T', ' ');
+  }
+
+  return date.toISOString().slice(0, 19).replace('T', ' ');
+}
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
 
