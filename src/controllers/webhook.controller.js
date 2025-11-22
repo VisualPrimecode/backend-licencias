@@ -1270,35 +1270,41 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
 
     // 6️⃣ Registrar envío en BD si hay productos válidos
     let envioId = null;
-    if (productosProcesados.length > 0) {
-      const envioData = {
-        empresa_id,
-        usuario_id,
-        nombre_cliente,
-        email_cliente,
-        numero_pedido,
-        estado: 'pendiente',
-        fecha_envio: formatFechaMySQL(fecha_envio),
-        woocommerce_id: wooId,
-        woo_idproduct: null
-      };
 
-      const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
-      if (!smtpConfig) throw new Error('No se encontró configuración SMTP activa');
+// ✅ Nuevo comportamiento: SOLO ENVIAR si NO hubo errores
+if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
 
-      envioId = await Envio.createEnvio(envioData);
+  const envioData = {
+    empresa_id,
+    usuario_id,
+    nombre_cliente,
+    email_cliente,
+    numero_pedido,
+    estado: 'pendiente',
+    fecha_envio: formatFechaMySQL(fecha_envio),
+    woocommerce_id: wooId,
+    woo_idproduct: null
+  };
 
-      console.log(`📦 Pedido ${numero_pedido}: encolando ${productosProcesados.length} productos procesados`);
-      await encolarEnvio(
-        envioId,
-        { ...envioData, productos: productosProcesados, empresaName },
-        smtpConfig,
-        empresa_id,
-        usuario_id,
-        numero_pedido,
-        registrarEnvioError
-      );
-    }
+  const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
+  if (!smtpConfig) throw new Error('No se encontró configuración SMTP activa');
+
+  envioId = await Envio.createEnvio(envioData);
+
+  console.log(`📦 Pedido ${numero_pedido}: encolando ${productosProcesados.length} productos procesados`);
+  await encolarEnvio(
+    envioId,
+    { ...envioData, productos: productosProcesados, empresaName },
+    smtpConfig,
+    empresa_id,
+    usuario_id,
+    numero_pedido,
+    registrarEnvioError
+  );
+
+} else if (erroresDetectados.length > 0) {
+  console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
+}
 
     // 7️⃣ Alerta consolidada si hubo errores
     if (erroresDetectados.length > 0) {
