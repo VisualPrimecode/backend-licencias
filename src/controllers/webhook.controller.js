@@ -1194,7 +1194,9 @@ try {
     throw error;
   }
 }*/
- function formatFechaMySQL(dateInput = new Date()) {
+ 
+
+function formatFechaMySQL(dateInput = new Date()) {
   const date = (dateInput instanceof Date)
     ? dateInput
     : new Date(dateInput); // si viene string, lo convierte
@@ -1206,6 +1208,7 @@ try {
 
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
+
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
 
@@ -1343,7 +1346,13 @@ if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
     }
 
     // 8️⃣ Liberar lock (éxito o parcial)
-    await PedidosLock.liberarLock(wooId, numero_pedido, 'completed');
+    let estadoFinal = 'completed';
+
+if (erroresDetectados.length > 0) {
+  estadoFinal = productosProcesados.length > 0 ? 'partial' : 'failed';
+}
+
+await PedidosLock.liberarLock(wooId, numero_pedido, estadoFinal);
 
     // 9️⃣ Retornar resultado final
     return {
