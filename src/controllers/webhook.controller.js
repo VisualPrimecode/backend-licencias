@@ -485,7 +485,8 @@ async function revertirSeriales(productos, woocommerce_id) {
 
 const mapaExtrasPersonalizado = {
   "office 2024 pro plus": 329,
-  "🔥 selecciona acá tu antivirus mcafee antivirus plus 1 año / 1 dispositivo $6.990": 339
+  "🔥 selecciona acá tu antivirus mcafee antivirus plus 1 año / 1 dispositivo $6.990": 339,
+  "Office 2021 Professional":331,
 };
 
 
