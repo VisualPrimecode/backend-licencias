@@ -489,9 +489,6 @@ const mapaExtrasPersonalizado = {
   "Office 2021 Professional":331,
 };
 
-
-
-
 async function procesarProductosExtraAutomatico(extraOptions, wooId, empresa_id, numero_pedido) {
   console.log("🔍 Iniciando procesamiento de productos extra automáticos...");
   console.log("📦 Extra options recibidos:", JSON.stringify(extraOptions, null, 2));
@@ -800,8 +797,6 @@ async function procesarProductos(
     erroresDetectados
   };
 }
-
-
 
 /* -----------------------------------------
    🔧 FUNCIONES AUXILIARES SIMPLIFICADAS
@@ -1309,7 +1304,7 @@ if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
 } else if (erroresDetectados.length > 0) {
   console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
 }
-
+/*
     // 7️⃣ Alerta consolidada si hubo errores
     if (erroresDetectados.length > 0) {
       console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Enviando alerta consolidada...`);
@@ -1345,7 +1340,7 @@ if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
         console.warn('⚠️ No se encontró configuración SMTP para enviar alerta de pedido.');
       }
     }
-
+*/
     // 8️⃣ Liberar lock (éxito o parcial)
     let estadoFinal = 'completed';
 

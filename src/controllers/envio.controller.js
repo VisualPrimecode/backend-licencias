@@ -182,7 +182,9 @@ async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody, n
 // 🔹 Mapa de excepciones temporales
 const mapaExtrasPersonalizado = {
   "office 2024 pro plus": 329,
-  "🔥 selecciona acá tu antivirus mcafee antivirus plus 1 año / 1 dispositivo $6.990": 339
+  "🔥 selecciona acá tu antivirus mcafee antivirus plus 1 año / 1 dispositivo $6.990": 339,
+  "Office 2021 Professional":331,
+
 };
 
 async function procesarProductosExtra(extraOptions, woocommerce_id, empresa_id, numero_pedido, envio_tipo) {
