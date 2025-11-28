@@ -460,7 +460,7 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
 }
 // Revertir seriales a "disponible"
 
-async function revertirSeriales(productos, woocommerce_id) {
+async function revertirSeriales(productos) {
   if (!Array.isArray(productos)) return;
 
   for (const producto of productos) {
@@ -468,14 +468,19 @@ async function revertirSeriales(productos, woocommerce_id) {
 
     for (const serial of producto.seriales) {
       try {
+
         await Serial.updateSerial2(serial.id_serial, {
-          codigo: serial.codigo,
-          producto_id: producto.producto_id,
-          estado: 'disponible', // 👈 revertimos solo el estado
-          observaciones: 'Rollback por error en envío',
-          usuario_id: null,     // lo podés decidir: mantener o resetear
-          woocommerce_id        // 👈 se pasa desde arriba, no desde el serial
+          codigo: serial.codigo,               // NO se toca
+          producto_id: producto.producto_id,   // NO se toca
+          estado: 'disponible',                // ✔ revertir
+          observaciones: null,                 // opcional (puedes dejar lo que tenía)
+          usuario_id: null,                    // opcional (si quieres limpiar)
+          woocommerce_id: serial.woocommerce_id, // ❗ se mantiene, NO se limpia si no quieres
+          numero_pedido: null                  // ✔ limpiar
         });
+
+        console.log(`🔄 Serial revertido: ${serial.id_serial}`);
+
       } catch (err) {
         console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
       }
@@ -1255,7 +1260,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     // 4️⃣ Obtener nombre de empresa
     const empresaName = await getEmpresaNameById(empresa_id);
 
-    // 5️⃣ Procesar productos y capturar errores
+    // 5️⃣ Procesar productos
     const productosRaw = data.line_items || data.products || [];
     const { productosProcesados, erroresDetectados } = await procesarProductos(
       productosRaw,
@@ -1267,44 +1272,46 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       data.currency
     );
 
-    // 6️⃣ Registrar envío en BD si hay productos válidos
+    // 6️⃣ Registrar envío SOLO si no hubo errores
     let envioId = null;
 
-// ✅ Nuevo comportamiento: SOLO ENVIAR si NO hubo errores
-if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
+    if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
 
-  const envioData = {
-    empresa_id,
-    usuario_id,
-    nombre_cliente,
-    email_cliente,
-    numero_pedido,
-    estado: 'pendiente',
-    fecha_envio: formatFechaMySQL(fecha_envio),
-    woocommerce_id: wooId,
-    woo_idproduct: null
-  };
+      const envioData = {
+        empresa_id,
+        usuario_id,
+        nombre_cliente,
+        email_cliente,
+        numero_pedido,
+        estado: 'pendiente',
+        fecha_envio: formatFechaMySQL(fecha_envio),
+        woocommerce_id: wooId,
+        woo_idproduct: null
+      };
 
-  const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
-  if (!smtpConfig) throw new Error('No se encontró configuración SMTP activa');
+      const smtpConfig = await obtenerSMTPConfig(wooId, numero_pedido, registrarEnvioError);
+      if (!smtpConfig) throw new Error('No se encontró configuración SMTP activa');
 
-  envioId = await Envio.createEnvio(envioData);
+      envioId = await Envio.createEnvio(envioData);
 
-  console.log(`📦 Pedido ${numero_pedido}: encolando ${productosProcesados.length} productos procesados`);
-  await encolarEnvio(
-    envioId,
-    { ...envioData, productos: productosProcesados, empresaName },
-    smtpConfig,
-    empresa_id,
-    usuario_id,
-    numero_pedido,
-    registrarEnvioError
-  );
+      console.log(`📦 Pedido ${numero_pedido}: encolando ${productosProcesados.length} productos procesados`);
 
-} else if (erroresDetectados.length > 0) {
-  console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
-}
-/*
+      await encolarEnvio(
+        envioId,
+        { ...envioData, productos: productosProcesados, empresaName },
+        smtpConfig,
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        registrarEnvioError
+      );
+
+    } else if (erroresDetectados.length > 0) {
+      console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
+
+      // 🔄 7️⃣ ROLLBACK DE SERIALES
+      try {
+        /*
     // 7️⃣ Alerta consolidada si hubo errores
     if (erroresDetectados.length > 0) {
       console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Enviando alerta consolidada...`);
@@ -1341,16 +1348,23 @@ if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
       }
     }
 */
-    // 8️⃣ Liberar lock (éxito o parcial)
+        await revertirSeriales(productosProcesados, wooId);
+        console.log(`🔄 Rollback de seriales realizado correctamente para pedido ${numero_pedido}`);
+      } catch (rollbackError) {
+        console.error(`❌ Error realizando rollback de seriales del pedido ${numero_pedido}:`, rollbackError);
+      }
+    }
+
+    // 8️⃣ Liberar lock
     let estadoFinal = 'completed';
 
-if (erroresDetectados.length > 0) {
-  estadoFinal = productosProcesados.length > 0 ? 'partial' : 'failed';
-}
+    if (erroresDetectados.length > 0) {
+      estadoFinal = productosProcesados.length > 0 ? 'partial' : 'failed';
+    }
 
-await PedidosLock.liberarLock(wooId, numero_pedido, estadoFinal);
+    await PedidosLock.liberarLock(wooId, numero_pedido, estadoFinal);
 
-    // 9️⃣ Retornar resultado final
+    // 9️⃣ Retornar resultado
     return {
       envioId,
       productosProcesados: productosProcesados.length,
@@ -1359,12 +1373,14 @@ await PedidosLock.liberarLock(wooId, numero_pedido, estadoFinal);
 
   } catch (error) {
     await PedidosLock.liberarLock(wooId, numero_pedido, 'failed');
+
     await registrarEnvioError({
       woo_config_id: wooId,
       numero_pedido,
       motivo_error: 'ERROR_PROCESAR_PEDIDO',
       detalles_error: error.stack || error.message
     });
+
     console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
     throw error;
   }
