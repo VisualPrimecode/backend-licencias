@@ -1307,17 +1307,30 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       );
 
     } else if (erroresDetectados.length > 0) {
-      console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
+  console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
 
-      // 🔄 7️⃣ ROLLBACK DE SERIALES
-      try {
-        /*
+  // 🔄 7️⃣ ROLLBACK DE SERIALES + Control de alerta
+  try {
+
     // 7️⃣ Alerta consolidada si hubo errores
-    if (erroresDetectados.length > 0) {
-      console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Enviando alerta consolidada...`);
+    console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Verificando alerta...`);
+    const { crearSiNoExisteAlertaPedido } = require('../models/alertasPedidosModel');
+    // 📌 1. Revisar si ya existe alerta para este pedido
+    const { creada } = await crearSiNoExisteAlertaPedido({
+      numero_pedido,
+      woo_config_id: wooId,
+      empresa_id,
+      motivo: `Pedido con errores (${erroresDetectados.length})`
+    });
+
+    if (creada) {
+      // 📌 2. Enviar alerta solo si fue creada recien (no existía)
+      console.log(`📧 Enviando alerta consolidada para pedido ${numero_pedido}...`);
+
       const smtp = await obtenerSMTPConfig(wooId);
       if (smtp) {
         const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
+
         await alertaPedidoQueue.add({
           wooId,
           numero_pedido,
@@ -1329,12 +1342,12 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
           smtpConfig: smtp,
           email_destinatario: [
             'claudiorodriguez7778@gmail.com',
-            'cleon@cloudi.cl',
-            'dtorres@cloudi.cl'
+           // 'cleon@cloudi.cl',
+            //'dtorres@cloudi.cl'
           ]
         }, { attempts: 3, removeOnComplete: true, priority: 1 });
 
-        // 🧱 Opcional: bloquear productos con fallos
+        // 🧱 Bloqueo opcional de productos fallidos
         const { bloquearProducto } = require('../models/controlAlertasStockModel');
         for (const err of erroresDetectados) {
           try {
@@ -1346,14 +1359,20 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
       } else {
         console.warn('⚠️ No se encontró configuración SMTP para enviar alerta de pedido.');
       }
+    } else {
+      // 📌 Ya existía alerta → no enviar
+      console.log(`ℹ️ Alerta para el pedido ${numero_pedido} ya existía. No se enviará nuevamente.`);
     }
-*/
-        await revertirSeriales(productosProcesados, wooId);
-        console.log(`🔄 Rollback de seriales realizado correctamente para pedido ${numero_pedido}`);
-      } catch (rollbackError) {
-        console.error(`❌ Error realizando rollback de seriales del pedido ${numero_pedido}:`, rollbackError);
-      }
-    }
+
+    // 7️⃣ Siempre rollback de seriales
+    await revertirSeriales(productosProcesados, wooId);
+    console.log(`🔄 Rollback de seriales realizado correctamente para pedido ${numero_pedido}`);
+
+  } catch (rollbackError) {
+    console.error(`❌ Error realizando rollback de seriales del pedido ${numero_pedido}:`, rollbackError);
+  }
+}
+
 
     // 8️⃣ Liberar lock
     let estadoFinal = 'completed';
