@@ -289,13 +289,16 @@ async function revertirSeriales(productos, woocommerce_id) {
     for (const serial of producto.seriales) {
       try {
         await Serial.updateSerial2(serial.id_serial, {
-          codigo: serial.codigo,
-          producto_id: producto.producto_id,
-          estado: 'disponible', // 👈 revertimos solo el estado
-          observaciones: 'Rollback por error en envío',
-          usuario_id: null,     // lo podés decidir: mantener o resetear
-          woocommerce_id        // 👈 se pasa desde arriba, no desde el serial
-        });
+  estado: 'disponible',
+  numero_pedido: null,
+
+  // lo demás NO se debe enviar
+  codigo: null,
+  producto_id: null,
+  observaciones: null,
+  usuario_id: null,
+  woocommerce_id: null
+});
       } catch (err) {
         console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
       }
