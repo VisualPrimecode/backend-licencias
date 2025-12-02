@@ -63,45 +63,38 @@ const updateSerialEstado = async (id, {
   );
   return result;
 };
-const updateSerial2 = async (
-  id,
-  {
-    codigo,
-    producto_id,
-    estado,
-    observaciones,
-    usuario_id,
-    woocommerce_id,
-    numero_pedido // 👈 nuevo campo
+const updateSerial2 = async (id, data) => {
+  console.log("🔧 Actualizando serial con ID:", id);
+  console.log("Datos recibidos para actualizar:", data);
+
+  // Construimos partes dinámicas del SQL
+  const campos = [];
+  const valores = [];
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) {                // ❗ Solo campos realmente enviados
+      campos.push(`${key} = ?`);
+      valores.push(value);
+    }
   }
-) => {
-  console.log("Actualizando serial con ID:", id);
-  console.log("Datos a actualizar:", codigo, producto_id, estado, observaciones, usuario_id, woocommerce_id, numero_pedido);
-  console.log("typeof woocommerce_id:", typeof woocommerce_id, "valor:", woocommerce_id);
-  console.log("typeof id:", typeof id, "valor:", id);
 
-  const [result] = await db.query(
-    `UPDATE seriales
-     SET codigo = ?,
-         producto_id = ?, 
-         estado = ?, 
-         observaciones = ?, 
-         usuario_id = ?, 
-         woocommerce_id = ?,
-         numero_pedido = ?      -- 👈 nuevo campo en la BD
-     WHERE id = ?`,
-    [
-      codigo,
-      producto_id,
-      estado,
-      observaciones,
-      usuario_id,
-      woocommerce_id,
-      numero_pedido, // 👈 en la query
-      Number(id)     // 👈 forzamos a number
-    ]
-  );
+  if (campos.length === 0) {
+    console.log("⚠️ No hay campos para actualizar en updateSerial2");
+    return;
+  }
 
+  const sql = `
+    UPDATE seriales
+    SET ${campos.join(', ')}
+    WHERE id = ?
+  `;
+
+  valores.push(Number(id)); // último parámetro
+
+  console.log("🧩 Query generada:", sql);
+  console.log("🧩 Valores:", valores);
+
+  const [result] = await db.query(sql, valores);
   return result;
 };
 
@@ -277,6 +270,7 @@ const obtenerSerialDisponible2 = async (producto_id, woocommerce_id, numero_pedi
     //office 365
     388: [330], 
     416: [330],
+    443:[330],
     //office 2024
     386: [329],
     //office 2021

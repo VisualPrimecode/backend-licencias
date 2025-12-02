@@ -461,35 +461,69 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
 // Revertir seriales a "disponible"
 
 async function revertirSeriales(productos) {
-  console.log('productos a revertir',productos);
+  console.log("🔄 Iniciando reversión de seriales...");
   if (!Array.isArray(productos)) return;
 
   for (const producto of productos) {
     if (!Array.isArray(producto.seriales)) continue;
 
     for (const serial of producto.seriales) {
-      console.log('revirtiendo serial',serial);
       try {
+        console.log(`🔄 Revirtiendo serial ${serial.id_serial} (${serial.codigo})`);
 
         await Serial.updateSerial2(serial.id_serial, {
-          codigo: serial.codigo,               // NO se toca
-          producto_id: producto.producto_id,   // NO se toca
-          estado: 'disponible',                // ✔ revertir
-          observaciones: null,                 // opcional (puedes dejar lo que tenía)
-          usuario_id: null,                    // opcional (si quieres limpiar)
-          woocommerce_id: serial.woocommerce_id, // ❗ se mantiene, NO se limpia si no quieres
-          numero_pedido: null                  // ✔ limpiar
+          estado: 'disponible',
+          numero_pedido: null
         });
 
-        console.log(`🔄 Serial revertido: ${serial.id_serial}`);
+        console.log(`✔ Serial ${serial.id_serial} revertido exitosamente`);
 
       } catch (err) {
-        console.log('fallo revertir serial');
         console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
       }
     }
   }
 }
+// 👉 Método de prueba para updateSerial2
+exports.testUpdateSerial = async (req, res) => {
+  try {
+    const { id } = req.params;  // ID del serial desde la URL
+    const data = req.body;      // Campos a actualizar desde el body
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        message: "Debes enviar el ID del serial en la URL"
+      });
+    }
+
+    if (!data || typeof data !== 'object') {
+      return res.status(400).json({
+        ok: false,
+        message: "Debes enviar un objeto JSON con los campos a actualizar"
+      });
+    }
+
+    console.log("🧪 Test Update Serial → ID:", id, "Data:", data);
+
+    const result = await Serial.updateSerial2(id, data);
+
+    return res.json({
+      ok: true,
+      message: "Serial actualizado correctamente",
+      updateResult: result
+    });
+
+  } catch (err) {
+    console.error("❌ Error en testUpdateSerial:", err);
+    return res.status(500).json({
+      ok: false,
+      message: "Error ejecutando updateSerial2",
+      error: err.message
+    });
+  }
+};
+
 
 const mapaExtrasPersonalizado = {
   "office 2024 pro plus": 329,

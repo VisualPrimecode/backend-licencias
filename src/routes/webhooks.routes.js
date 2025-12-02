@@ -22,6 +22,10 @@ router.post(
   webhookController.pedidoCompletado
 );
 
+// 🔹 RUTA DE TEST PARA updateSerial2
+router.post('/test/serial/update/:id', webhookController.testUpdateSerial);
+
+
 // 🔹 5️⃣ CRUD ALTERNATIVO / LEGACY (mantenlo al final)
 router.get('/webhooks', webhookController.getAll);
 router.get('/webhook/:id', webhookController.getById);
