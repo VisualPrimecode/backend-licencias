@@ -461,12 +461,14 @@ async function verificarDuplicado(numero_pedido, wooId, empresa_id, usuario_id, 
 // Revertir seriales a "disponible"
 
 async function revertirSeriales(productos) {
+  console.log('productos a revertir',productos);
   if (!Array.isArray(productos)) return;
 
   for (const producto of productos) {
     if (!Array.isArray(producto.seriales)) continue;
 
     for (const serial of producto.seriales) {
+      console.log('revirtiendo serial',serial);
       try {
 
         await Serial.updateSerial2(serial.id_serial, {
@@ -482,6 +484,7 @@ async function revertirSeriales(productos) {
         console.log(`🔄 Serial revertido: ${serial.id_serial}`);
 
       } catch (err) {
+        console.log('fallo revertir serial');
         console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
       }
     }
@@ -1365,6 +1368,8 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     }
 
     // 7️⃣ Siempre rollback de seriales
+    console.log('productosProcesados en rollback',productosProcesados);
+    console.log('wooId en rollback',wooId);
     await revertirSeriales(productosProcesados, wooId);
     console.log(`🔄 Rollback de seriales realizado correctamente para pedido ${numero_pedido}`);
 
