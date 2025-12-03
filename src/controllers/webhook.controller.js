@@ -1346,70 +1346,93 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     } else if (erroresDetectados.length > 0) {
   console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
 
-  // 🔄 7️⃣ ROLLBACK DE SERIALES + Control de alerta
   try {
 
-    // 7️⃣ Alerta consolidada si hubo errores
-    console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Verificando alerta...`);
-    const { crearSiNoExisteAlertaPedido } = require('../models/alertasPedidosModel');
-    // 📌 1. Revisar si ya existe alerta para este pedido
-    const { creada } = await crearSiNoExisteAlertaPedido({
-      numero_pedido,
-      woo_config_id: wooId,
-      empresa_id,
-      motivo: `Pedido con errores (${erroresDetectados.length})`
-    });
+    // 🕒 Validación horaria (Chile): NO enviar alertas entre 23:00 y 08:00
+    const ahora = new Date();
+    const horaChile = ahora.toLocaleString("en-US", { timeZone: "America/Santiago" });
+    const hora = new Date(horaChile).getHours();
+    console.log(`🕰️ Hora actual en Chile: ${hora}:00`);
+    console.log('hora en chile', horaChile);
 
-    if (creada) {
-      // 📌 2. Enviar alerta solo si fue creada recien (no existía)
-      console.log(`📧 Enviando alerta consolidada para pedido ${numero_pedido}...`);
+    const horarioRestringido = (hora >= 23 || hora < 8);
 
-      const smtp = await obtenerSMTPConfig(wooId);
-      if (smtp) {
-        const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
-
-        await alertaPedidoQueue.add({
-          wooId,
-          numero_pedido,
-          empresa_id,
-          productos_afectados: erroresDetectados,
-          total_productos_fallidos: erroresDetectados.length,
-          total_productos_ok: productosProcesados.length,
-          fecha_fallo: new Date(),
-          smtpConfig: smtp,
-          email_destinatario: [
-            'claudiorodriguez7778@gmail.com',
-           // 'cleon@cloudi.cl',
-            //'dtorres@cloudi.cl'
-          ]
-        }, { attempts: 3, removeOnComplete: true, priority: 1 });
-
-        // 🧱 Bloqueo opcional de productos fallidos
-        const { bloquearProducto } = require('../models/controlAlertasStockModel');
-        for (const err of erroresDetectados) {
-          try {
-            await bloquearProducto(err.producto_id, `Pedido ${numero_pedido} en alerta. Esperando reposición.`);
-          } catch (e) {
-            console.warn(`⚠️ No se pudo bloquear producto ${err.producto_id}:`, e.message);
-          }
-        }
-      } else {
-        console.warn('⚠️ No se encontró configuración SMTP para enviar alerta de pedido.');
-      }
+    if (horarioRestringido) {
+      console.log(`⏰ Pedido ${numero_pedido} con errores detectados (${erroresDetectados.length}), pero NO se registrará ni enviará alerta porque estamos en horario restringido (23:00 - 08:00).`);
+    
     } else {
-      // 📌 Ya existía alerta → no enviar
-      console.log(`ℹ️ Alerta para el pedido ${numero_pedido} ya existía. No se enviará nuevamente.`);
-    }
 
-    // 7️⃣ Siempre rollback de seriales
-    console.log('productosProcesados en rollback',productosProcesados);
-    console.log('wooId en rollback',wooId);
+      // 7️⃣ Alerta consolidada si hubo errores
+      console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Verificando alerta...`);
+
+      const { crearSiNoExisteAlertaPedido } = require('../models/alertasPedidosModel');
+
+      // 📌 1. Revisar si ya existe alerta para este pedido
+      const { creada } = await crearSiNoExisteAlertaPedido({
+        numero_pedido,
+        woo_config_id: wooId,
+        empresa_id,
+        motivo: `Pedido con errores (${erroresDetectados.length})`
+      });
+
+      if (creada) {
+        // 📌 2. Enviar alerta solo si fue creada recién (no existía)
+        console.log(`📧 Enviando alerta consolidada para pedido ${numero_pedido}...`);
+
+        const smtp = await obtenerSMTPConfig(wooId);
+        if (smtp) {
+
+          const alertaPedidoQueue = require('../queues/alertaPedidoQueue');
+
+          await alertaPedidoQueue.add({
+            wooId,
+            numero_pedido,
+            empresa_id,
+            productos_afectados: erroresDetectados,
+            total_productos_fallidos: erroresDetectados.length,
+            total_productos_ok: productosProcesados.length,
+            fecha_fallo: new Date(),
+            smtpConfig: smtp,
+            email_destinatario: [
+              'claudiorodriguez7778@gmail.com',
+              // 'cleon@cloudi.cl',
+              // 'dtorres@cloudi.cl'
+            ]
+          }, { attempts: 3, removeOnComplete: true, priority: 1 });
+
+          // 🧱 Bloqueo opcional de productos fallidos
+          const { bloquearProducto } = require('../models/controlAlertasStockModel');
+          for (const err of erroresDetectados) {
+            try {
+              await bloquearProducto(err.producto_id, `Pedido ${numero_pedido} en alerta. Esperando reposición.`);
+            } catch (e) {
+              console.warn(`⚠️ No se pudo bloquear producto ${err.producto_id}:`, e.message);
+            }
+          }
+
+        } else {
+          console.warn('⚠️ No se encontró configuración SMTP para enviar alerta de pedido.');
+        }
+
+      } else {
+        // 📌 Ya existía alerta → no enviar nuevamente
+        console.log(`ℹ️ Alerta para el pedido ${numero_pedido} ya existía. No se enviará nuevamente.`);
+      }
+
+    } // ← cierre del if horario
+
+    // 7️⃣ Siempre rollback de seriales (independiente del horario)
+    console.log('productosProcesados en rollback', productosProcesados);
+    console.log('wooId en rollback', wooId);
+
     await revertirSeriales(productosProcesados, wooId);
     console.log(`🔄 Rollback de seriales realizado correctamente para pedido ${numero_pedido}`);
 
   } catch (rollbackError) {
     console.error(`❌ Error realizando rollback de seriales del pedido ${numero_pedido}:`, rollbackError);
   }
+
+
 }
 
 
