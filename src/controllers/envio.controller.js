@@ -154,7 +154,8 @@ async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody, n
     { producto_id, woo_producto_id, nombre_producto, plantilla, seriales },
     ...extras
   ];
-}*/async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody) {
+}*/
+async function procesarProducto(producto, woocommerce_id, empresa_id, reqBody) {
   const { producto_id, woo_producto_id, nombre_producto, seriales, extra_options } = producto;
   const { numero_pedido, envio_tipo } = reqBody;
 
@@ -280,7 +281,9 @@ async function obtenerSMTPConfig(woocommerce_id) {
   };
 }
 // Revertir seriales a "disponible"
-async function revertirSeriales(productos, woocommerce_id) {
+async function revertirSeriales(productos) {
+  console.log("🔄 Iniciando reversión de seriales...");
+  console.log("productos para revertir:", JSON.stringify(productos, null, 2));
   if (!Array.isArray(productos)) return;
 
   for (const producto of productos) {
@@ -288,17 +291,15 @@ async function revertirSeriales(productos, woocommerce_id) {
 
     for (const serial of producto.seriales) {
       try {
-        await Serial.updateSerial2(serial.id_serial, {
-  estado: 'disponible',
-  numero_pedido: null,
+        console.log(`🔄 Revirtiendo serial ${serial.id_serial} (${serial.codigo})`);
 
-  // lo demás NO se debe enviar
-  codigo: null,
-  producto_id: null,
-  observaciones: null,
-  usuario_id: null,
-  woocommerce_id: null
-});
+        await Serial.updateSerial2(serial.id_serial, {
+          estado: 'disponible',
+          numero_pedido: null
+        });
+
+        console.log(`✔ Serial ${serial.id_serial} revertido exitosamente`);
+
       } catch (err) {
         console.error(`❌ Error revirtiendo serial ${serial.id_serial}:`, err);
       }
