@@ -74,28 +74,35 @@ const createPlantilla = async ({
 };
 
 // Actualizar una plantilla existente
-const updatePlantilla = async (
-  id,
-  {
-    empresa_id,
-    producto_id,
-    asunto,
-    encabezado,
-    cuerpo_html,
-    firma,
-    logo_url,
-    idioma,
-    activa
+const updatePlantilla = async (id, campos) => {
+  // Filtrar solo los campos que vienen definidos
+  const camposFiltrados = Object.entries(campos)
+    .filter(([_, valor]) => valor !== undefined);
+
+  if (camposFiltrados.length === 0) {
+    throw new Error("No hay campos válidos para actualizar");
   }
-) => {
+
+  // Construir dinámicamente "campo = ?" y los valores
+  const setClause = camposFiltrados
+    .map(([campo]) => `${campo} = ?`)
+    .join(', ');
+
+  const valores = camposFiltrados.map(([_, valor]) => valor);
+
+  // Agregar el id al final
+  valores.push(id);
+
   const [result] = await db.query(
     `UPDATE plantillas_envio 
-     SET empresa_id = ?, producto_id = ?, asunto = ?, encabezado = ?, cuerpo_html = ?, firma = ?, logo_url = ?, idioma = ?, activa = ?
+     SET ${setClause}
      WHERE id = ?`,
-    [empresa_id, producto_id, asunto, encabezado, cuerpo_html, firma, logo_url, idioma, activa, id]
+    valores
   );
+
   return result;
 };
+
 
 // Eliminar una plantilla
 const deletePlantilla = async (id) => {

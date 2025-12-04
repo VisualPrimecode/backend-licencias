@@ -380,6 +380,22 @@ exports.createEnvio = async (req, res) => {
   }
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //envio cotizacion metodo controller
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización44s...');
@@ -522,11 +538,16 @@ exports.createCotizacion = async (req, res) => {
       descuento: descuentoPorcentaje, // 👈 nuevo campo
       
     });
+const fechaActual = new Date().toISOString().split('T')[0];
 
+    const valido_por = '15 días';
     // 📦 Encolar job para envío
     await cotizacionQueue.add({
       id,
       ...cotizacionData,
+      numero_cotizacion: id,           // 👈 por claridad si quieres diferenciar
+  fecha_envio: fechaActual,// 👈 nueva fecha enviada al worker
+  valido_por,
       total,
       subtotal,
       iva,

@@ -35,6 +35,8 @@ module.exports = async function cotizacionProcessor(job) {
           return { locale: 'es-MX', symbol: '$', suffix: 'MXN', decimals: 2 };
         case 'PEN':
           return { locale: 'es-PE', symbol: 'S/', suffix: 'PEN', decimals: 2 };
+        case 'EUR':
+          return { locale: 'es-ES', symbol: '€', suffix: 'EUR', decimals: 2 };
         default:
           return { locale: 'es-CL', symbol: '$', suffix: 'CLP', decimals: 0 };
       }
@@ -115,18 +117,23 @@ if (!cotizacion.monedaDestino || cotizacion.monedaDestino === 'CLP') {
   console.log(`🌐 Cotización en moneda extranjera (${cotizacion.monedaDestino}) — se omiten datos de transferencia`);
   datosTransferencia = ''; // o podrías poner un texto alternativo si lo deseas
 }
-
+  console.log('datos transfetneci:', plantilla.datosTransferencia);
 
     // 🧠 Reemplazar placeholders en plantilla
     let htmlContent = plantilla.cuerpo_html || '';
     htmlContent = htmlContent
       .replace(/{{nombre_cliente}}/g, cotizacion.nombre_cliente || 'Cliente')
       .replace(/{{numero_cotizacion}}/g, cotizacion.numero_cotizacion || 'N/A')
+      .replace(/{{valido_por}}/g, cotizacion.valido_por || 'N/A')
+      .replace(/{{fecha}}/g, cotizacion.fecha_envio || 'N/A')
+      .replace(/{{firma}}/g, plantilla.firma || 'N/A')
+
+
       .replace(/{{total}}/g, totalFormateado)
       .replace(/{{subtotal}}/g, subtotalFormateado)
       .replace(/{{iva}}/g, ivaFormateado)
       .replace(/{{tabla_productos}}/g, productosHtml)
-      .replace(/{{firma}}/g, plantilla.firma || '')
+      .replace(/{{datos_transferencia}}/g, datosTransferencia)
       .replace(/{{logo_url}}/g, plantilla.logo_url || '')
       .replace(/{{encabezado}}/g, plantilla.encabezado || '')
       .replace(/{{validez_texto}}/g, plantilla.validez_texto || '')
