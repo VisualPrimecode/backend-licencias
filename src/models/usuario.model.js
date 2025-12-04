@@ -1,6 +1,4 @@
 const db = require('../config/db');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
 
 const getAllUsuarios = async () => {
@@ -13,15 +11,7 @@ const getAllUsuarios = async () => {
       rol
     FROM usuarios
   `);
-  /*
-  const [rows] = await db.query(`
-    SELECT DISTINCT 
-      u.id AS usuario_id,
-      u.nombre AS nombre_usuario,
-      u.email,
-      u.rol
-    FROM correos_dinamicos.usuarios u
-  `);*/
+
   return rows;
 };
 
@@ -78,9 +68,11 @@ const updateUsuario = async (id, { nombre, email, contraseña, rol, activo }) =>
   return result;
 };
 const deleteUsuario = async (id) => {
-  const [result] = await db.query('UPDATE usuarios SET activo = 0 WHERE id = ?', [id]);
+  await db.query('DELETE FROM usuarios_empresas WHERE usuario_id = ?', [id]);
+  const [result] = await db.query('DELETE FROM usuarios WHERE id = ?', [id]);
   return result;
 };
+
 
 
 module.exports = {

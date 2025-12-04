@@ -1395,8 +1395,8 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
             smtpConfig: smtp,
             email_destinatario: [
               'claudiorodriguez7778@gmail.com',
-              // 'cleon@cloudi.cl',
-              // 'dtorres@cloudi.cl'
+              'cleon@cloudi.cl',
+              'dtorres@cloudi.cl'
             ]
           }, { attempts: 3, removeOnComplete: true, priority: 1 });
 
