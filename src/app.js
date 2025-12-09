@@ -32,6 +32,7 @@ const currencyRoutes = require('./routes/currency.routes');
 const pollingControlRoutes = require('./routes/pollingControl.routes');
 const alertRoutes =require('./routes/alertasStock.routes');
 const productoPersonalizadosRoutes = require('./routes/productosPersonalizados');
+const flowRoutes = require('./routes/flow.routes');
 
 
 const app = express();
@@ -66,6 +67,7 @@ app.use('/api/polling-control', pollingControlRoutes);
 app.use('/api/alertaStock', alertRoutes);
 
 app.use('/api/productos-personalizados', productoPersonalizadosRoutes);
+app.use('/api/flow', flowRoutes);
 // Ruta raíz
 app.get('/', (req, res) => {
   res.send('API de Licencias funcionando 🚀');

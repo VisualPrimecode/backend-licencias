@@ -9,6 +9,9 @@ router.get('/woo/:id/orders/not-sent', wooConfigController.getWooOrdersNotSent);
 
 // Obtener un pedido específico por ID de pedido (más eficiente)
 router.get('/woo/:id/orders/:orderId', wooConfigController.getWooOrderById);
+// Actualizar un pedido específico en WooCommerce
+router.put('/woo/:configId/orders/:orderId', wooConfigController.updateWooOrder);
+
 
 // Obtener todas las configuraciones
 router.get('/', wooConfigController.getAllConfigs);
@@ -30,9 +33,10 @@ router.delete('/:id', wooConfigController.deleteConfig);
 
 // Obtener productos de WooCommerce por ID de configuración
 router.get('/woo/:id/products', wooConfigController.getAllConfigsWooProducts);
-
+router.get('/woo/fallidos/:id/orders', wooConfigController.getAllConfigsWooOrdersFallidas);
 // Obtener pedidos de WooCommerce por ID de configuración
 router.get('/woo/:id/orders', wooConfigController.getAllConfigsWooOrders);
+
 
 // 🚀 Nueva ruta para obtener pedidos WooCommerce no enviados
 

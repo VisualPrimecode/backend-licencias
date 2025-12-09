@@ -77,6 +77,78 @@ exports.getAllConfigsWooOrders = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
   }
 };
+// Actualizar un pedido de WooCommerce
+exports.updateWooOrder = async (req, res) => {
+  console.log("🔄 Actualizando pedido WooCommerce...");
+
+  try {
+    const { configId, orderId } = req.params; 
+    const data = req.body; // Ej: { "status": "completed" }
+
+    console.log(`📦 Datos recibidos para actualizar pedido ${orderId}:`, data);
+
+    // Validaciones básicas
+    if (!data || Object.keys(data).length === 0) {
+      return res.status(400).json({ error: "No se enviaron datos para actualizar el pedido" });
+    }
+
+    const updatedOrder = await WooConfig.updatePedido(configId, orderId, data);
+
+    if (!updatedOrder) {
+      return res.status(404).json({ error: "Pedido no encontrado o no pudo ser actualizado" });
+    }
+
+    console.log(`✅ Pedido ${orderId} actualizado correctamente.`);
+    res.json(updatedOrder);
+
+  } catch (error) {
+    console.error("❌ Error al actualizar pedido WooCommerce:", error.response?.data || error);
+    res.status(500).json({ 
+      error: "Error al actualizar pedido WooCommerce",
+      details: error.response?.data || error.message
+    });
+  }
+};
+
+//obtener todos los pedidos de un WooCommerce
+exports.getAllConfigsWooOrdersFallidas = async (req, res) => {
+  console.log('🔍 Obteniendo pedidos WooCommerce...');
+  try {
+    const { id } = req.params;
+    const queryParams = req.query; // ✅ Añadido: recoger los query params
+
+    const orders = await WooConfig.getPedidosFallidos(id, queryParams); // ✅ Pasarlos
+    //console.log('Orders:', orders); // ✅ Añadido: para depuración
+
+    if (!orders) {
+      return res.status(404).json({ error: 'Configuración no encontrada' });
+    }
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Error al obtener pedidos WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
+  }
+};
+exports.getAllWooOrderState = async (req, res) => {
+  console.log('🔍 Obteniendo pedidos WooCommerce...');
+  try {
+    const { id } = req.params;
+    const queryParams = req.query; // ✅ Añadido: recoger los query params
+
+    const orders = await WooConfig.getPedidos(id, queryParams); // ✅ Pasarlos
+    //console.log('Orders:', orders); // ✅ Añadido: para depuración
+
+    if (!orders) {
+      return res.status(404).json({ error: 'Configuración no encontrada' });
+    }
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Error al obtener pedidos WooCommerce:', error);
+    res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
+  }
+};
 exports.searchWooOrders = async (req, res) => {
   console.log('🔍 Buscando pedidos WooCommerce con filtros...');
   try {

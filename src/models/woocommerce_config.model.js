@@ -164,11 +164,7 @@ const getPedidoById = async (idConfig, pedidoId) => {
       return null;
     }
 
-   if (order.status !== 'completed' && order.status !== 'processing') {
-  console.log(`⚠️ Pedido ${pedidoId} no está completado ni en proceso (estado: ${order.status})`);
-  return null;
-}
-
+   
 
     return {
       id: order.id,
