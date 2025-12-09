@@ -13,28 +13,22 @@ const getAllConfigs = async () => {
 const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
-
-   // console.log("estructura de la api", api);
- //   console.log("queryParams", queryParams);
-
-    // ✅ CORRECTO: sin { params: ... }
     const response = await api.get("products", queryParams);
 
-    //console.log("URL final:", response.config.url);
-    //console.log("Base URL:", response.config.baseURL);
-   // console.log("Params:", response.config.params);
 
+    // Retornar lista resumida de productos
     return response.data.map(product => ({
       id: product.id,
       name: product.name,
       price: product.price
     }));
-    
+
   } catch (error) {
     console.error("Error obteniendo productos:", error.response?.data || error);
     throw error;
   }
 };
+
 
 // Trae TODOS los productos de WooCommerce con paginación
 const getAllProducts = async (id, queryParams = {}) => {
@@ -154,11 +148,13 @@ const getPedidoById = async (idConfig, pedidoId) => {
 
   try {
     const api = await model.getWooApiInstanceByConfigId(idConfig);
+    console.log('datos api', api);
     console.log(`🔍 Buscando pedido por ID: ${pedidoId}`);
 
     const response = await api.get(`orders/${pedidoId}`);
     const order = response.data;
-
+    console.log(`✅ Pedido obtenido: ID ${order.id}, Estado: ${order.status}`);
+    console.log("Detalles del pedido:", order);
     if (!order) {
       console.log("❌ Pedido no encontrado.");
       return null;
@@ -395,10 +391,79 @@ const getPedidos = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
     const response = await api.get("orders", queryParams);
-
+ 
     // Filtrar pedidos con estado "completed" o "processing"
     const completedOrders = response.data.filter(order =>
       order.status === "completed" || order.status === "processing"
+    );
+    console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
+
+    const filteredOrders = completedOrders.map(order => ({
+      id: order.id,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+      customer_email: order.billing.email,
+      status: order.status,
+      total: parseFloat(order.total || 0),
+      currency: order.currency, // 👈 NUEVO CAMPO
+      payment_method: order.payment_method_title || order.payment_method,
+      products: order.line_items.map(item => {
+        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: opt.price || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      })
+    }));
+
+    return filteredOrders;
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+// Actualizar un pedido en WooCommerce
+const updatePedido = async (configId, orderId, data = {}) => {
+  console.log(`Actualizando pedido ${orderId} para el WooCommerce con ID de config: ${configId}`);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(configId);
+    console.log('Datos api:', api);
+    // Petición PUT a WooCommerce
+    const response = await api.put(`orders/${orderId}`, data);
+
+    console.log(`Pedido ${orderId} actualizado correctamente en WooCommerce.`);
+    
+    // WooCommerce devuelve el objeto de pedido actualizado
+    return response.data;
+
+  } catch (error) {
+    console.error("Error actualizando pedido en WooCommerce:", error.response?.data || error);
+    throw error;
+  }
+};
+
+const getPedidosFallidos = async (id, queryParams = {}) => {
+  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    const response = await api.get("orders", queryParams);
+ 
+    // Filtrar pedidos con estado "completed" o "processing"
+    const completedOrders = response.data.filter(order =>
+      order.status === "pending" || order.status === "cancelled" || order.status === "failed"
     );
     console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
 
@@ -696,6 +761,23 @@ const getConfigsByEmpresaId = async (empresaId) => {
   );
   return rows;
 };
+
+const getFlowConfigById = async (id) => {
+  const [rows] = await db.query(
+    'SELECT flow_api_key, flow_secret_key FROM woocommerce_api_config WHERE id = ? LIMIT 1',
+    [id]
+  );
+
+  if (!rows || rows.length === 0) {
+    throw new Error('No se encontró configuración Flow para este ID');
+  }
+
+  return {
+    apiKey: rows[0].flow_api_key,
+    secretKey: rows[0].flow_secret_key
+  };
+};
+
 // 📈 Informe de tendencia de ventas por producto en MXN
 // 📊 Analizar tendencia de ventas de productos en MXN
 // 📊 Analizar tendencia de ventas de productos en MXN
@@ -914,6 +996,7 @@ console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
       MXN: 52,   // 1 MXN → CLP
       PEN: 276,  // 1 PEN → CLP
       COP: 0.24, // 1 COP → CLP
+      ARS: 1.46,
       CLP: 1,    // nativo
     };
 
@@ -1345,5 +1428,8 @@ module.exports = {
   getVentasPorPais,
   getVentasPorPaisGlobal,
   getPromedioProductosGlobal,
-  getPedidosNoEnviadosPorTienda
+  getPedidosNoEnviadosPorTienda,
+  getFlowConfigById,
+  getPedidosFallidos,
+  updatePedido
 };
