@@ -21,6 +21,41 @@ const getCotizacionByIdWoo = async (id) => {
   return rows;
 };
 
+const getCotizacionesWithEstado = async (id_woo) => {
+  const [rows] = await db.query(
+    `SELECT 
+        c.*, 
+        e.id AS id_envio,
+        e.estado_envio AS estado_concretacion,
+        e.mensaje_error AS mensaje_error_envio,
+        e.fecha_envio AS fecha_envio_envio
+     FROM cotizaciones_enviadas c
+     LEFT JOIN envios_pesonalizados e
+       ON e.id_cotizaccion = c.id
+     WHERE c.id_woo = ?
+     ORDER BY c.fecha_envio DESC`,
+    [id_woo]
+  );
+
+  return rows;
+};
+
+const findEnvioByCotizacion = async (id_cotizaccion, id_woo) => {
+  const [rows] = await db.query(
+    `SELECT id 
+     FROM envios_pesonalizados 
+     WHERE id_cotizaccion = ? AND id_woo = ?
+     LIMIT 1`,
+    [id_cotizaccion, id_woo]
+  );
+
+  if (rows.length > 0) {
+    return { exists: true, id_envio: rows[0].id };
+  }
+
+  return { exists: false, id_envio: null };
+};
+
 // Crear una cotización enviada
 const createCotizacion = async (datos) => {
   const {
@@ -83,6 +118,7 @@ const createEnvioPersonalizado = async (datos) => {
   const {
     id_usuario,
     id_woo,
+    id_cotizacion,   // 👈 Nuevo campo
     numero_pedido,
     id_empresa,
     nombre_cliente,
@@ -103,13 +139,14 @@ const createEnvioPersonalizado = async (datos) => {
 
   const [result] = await db.query(
     `INSERT INTO envios_pesonalizados (
-      id_usuario, id_woo, numero_pedido, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
+      id_usuario, id_woo, id_cotizaccion, numero_pedido, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
       productos_json, smtp_host, smtp_user, plantilla_usada,
       asunto_correo, cuerpo_html, estado_envio, mensaje_error, mensaje_opcional
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id_usuario,
       id_woo,
+      id_cotizacion,
       numero_pedido,
       id_empresa,
       nombre_cliente,
@@ -131,7 +168,6 @@ const createEnvioPersonalizado = async (datos) => {
 
   return result.insertId;
 };
-
 
 // Eliminar cotización (opcional)
 const deleteCotizacion = async (id) => {
@@ -164,6 +200,8 @@ module.exports = {
   updateCotizacionEstado,
   getCotizacionByIdWoo,
   createEnvioPersonalizado,
-  updateEnvioPersonalizadoEstado
+  updateEnvioPersonalizadoEstado,
+  findEnvioByCotizacion,
+  getCotizacionesWithEstado
 
 };

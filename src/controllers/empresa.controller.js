@@ -1,5 +1,6 @@
 const Empresa = require('../models/empresa.model');
 
+
 // Obtener todos los productos asociados a una empresa específica
 exports.getProductosPorEmpresa = async (req, res) => {
   console.log('🔍 Obteniendo productos para la empresa con ID: %s', req.params.empresaId);

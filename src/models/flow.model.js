@@ -3,7 +3,8 @@
 const crypto = require('node:crypto');
 const axios = require('axios');
 const querystring = require('node:querystring');
-const { getFlowConfigById } = require('../models/woocommerce_config.model'); 
+const { getFlowConfigById, getPedidosFallidos } = require('../models/woocommerce_config.model'); 
+
 
 
 /**
@@ -108,9 +109,74 @@ const getTransactionsByRange = async (startDate, endDate, flowId) => {
   }
 };
 
+const matchFailedOrdersWithFlow = async (wooConfigId, flowConfigId) => {
+  try {
+    // ------------------------------
+    // 1. Fechas: hoy y ayer
+    // ------------------------------
+    const hoy = new Date();
+    const ayer = new Date();
+    ayer.setDate(hoy.getDate() - 1);
+
+    const formatDate = d => d.toISOString().split("T")[0];
+
+    const startDate = formatDate(ayer);
+    const endDate = formatDate(hoy);
+
+    // ------------------------------
+    // 2. Obtener pedidos fallidos
+    // ------------------------------
+    const failedOrders = await getPedidosFallidos(wooConfigId);
+
+    // ------------------------------
+    // 3. Obtener transacciones de Flow
+    // ------------------------------
+    const flowResult = await getTransactionsByRange(startDate, endDate, flowConfigId);
+
+    // Aplanar todas las transacciones del rango
+    const allTransactions = [];
+    flowResult.forEach(day => {
+      if (day.transacciones?.data) {
+        allTransactions.push(...day.transacciones.data);
+      }
+    });
+
+    // ------------------------------
+    // 4. Crear mapa por commerceOrder
+    // ------------------------------
+    const txMap = new Map();
+
+    allTransactions.forEach(tx => {
+      const key = String(tx.commerceOrder).trim();
+      txMap.set(key, tx); // basta UNA coincidencia
+    });
+
+    // ------------------------------
+    // 5. Construir lista final
+    // ------------------------------
+    const result = failedOrders.map(order => {
+      const orderIdKey = String(order.id);
+
+      const transaccion = txMap.get(orderIdKey) || null;
+
+      return {
+        pedido: order,
+        transaccion
+      };
+    });
+
+    return result;
+
+  } catch (error) {
+    console.error("❌ Error en matchFailedOrdersWithFlow:", error);
+    throw error;
+  }
+};
+
 
 
 module.exports = {
   getTransactionsByDate,
-  getTransactionsByRange
+  getTransactionsByRange,
+  matchFailedOrdersWithFlow
 };

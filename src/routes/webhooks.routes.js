@@ -6,6 +6,9 @@ const webhookController = require('../controllers/webhook.controller');
 router.post('/woo/polling', webhookController.ejecutarPolling);
 router.post('/toggle-webhooks/:action', webhookController.toggleAllWebhooks);
 
+router.post('/revertir-seriales', webhookController.revertirSerialesController);
+
+
 // 🔹 2️⃣ RUTAS DE WEBHOOKS POR IDENTIFICADOR / CONFIG
 router.get('/webhooksXid/:id', webhookController.getWebhookById);
 router.get('/config/:configId', webhookController.getWebhooksByConfigId);

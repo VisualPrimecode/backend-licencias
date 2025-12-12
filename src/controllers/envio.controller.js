@@ -677,6 +677,11 @@ exports.envioProductos = async (req, res) => {
         };
       })
     );
+const productosParaGuardar = productosConSerialesYPlantilla.map((p) => {
+  const { plantilla, ...resto } = p;  
+  return resto;
+});
+
 
     // 🧾 Construir HTML básico con placeholders (sin reemplazos aún)
     if (!plantilla.cuerpo_html) {
@@ -690,6 +695,7 @@ exports.envioProductos = async (req, res) => {
     const id = await createEnvioPersonalizado({
       id_usuario: cotizacionData.user_id,
       id_woo: cotizacionData.woocommerce_id,
+      id_cotizacion: cotizacionData.numero_cotizacion,
       numero_pedido: cotizacionData.numero_pedido || null,
       id_empresa: cotizacionData.empresa_id,
       nombre_cliente: cotizacionData.nombre_cliente,
@@ -697,7 +703,7 @@ exports.envioProductos = async (req, res) => {
       total,
       subtotal,
       iva,
-      productos_json: productosConSerialesYPlantilla, 
+      productos_json: productosParaGuardar, 
       smtp_host: smtpConfig.host,
       smtp_user: smtpConfig.user,
       plantilla_usada: plantilla.id,

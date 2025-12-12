@@ -7,12 +7,15 @@ router.get('/', cotizacionController.getCotizaciones);
 
 // Obtener una cotización por ID
 router.get('/:id', cotizacionController.getCotizacionById);
-// Obtener una cotización por ID woo
+
+// Obtener cotizaciones por ID woo (versión antigua)
 router.get('/:id/cotizaciones', cotizacionController.getCotizacionesByIdWooController);
 
-// Crear una nueva cotización
-//router.post('/', cotizacionController.createCotizacion);
+// Obtener cotizaciones por ID woo + estado de concretación (NUEVA)
+router.get('/:id/cotizaciones-con-estado', cotizacionController.getCotizacionesConEstadoByIdWoo);
 
+// Verificar si existe un envío asociado a una cotización
+router.post('/check-envio', cotizacionController.checkEnvioByCotizacion);
 
 router.put('/:id/estadoPersonalizado', cotizacionController.updateEnvioPersonalizadoEstado);
 

@@ -23,6 +23,7 @@ const getEnviosByIdWoo = async (id_woo) => {
 const createEnvio = async ({
   id_usuario,
   id_woo,
+  id_cotizaccion,   // 👈 Nuevo campo
   id_empresa,
   nombre_cliente,
   email_destino,
@@ -40,13 +41,15 @@ const createEnvio = async ({
   fecha_envio
 }) => {
   console.log("👉 entro en createEnvio");
+
   const [result] = await db.query(
     `INSERT INTO envios_pesonalizados 
-     (id_usuario, id_woo, id_empresa, nombre_cliente, email_destino, total, subtotal, iva, productos_json, smtp_host, smtp_user, plantilla_usada, asunto_correo, cuerpo_html, estado_envio, mensaje_error, fecha_envio)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (id_usuario, id_woo, id_cotizaccion, id_empresa, id_cotizacion, nombre_cliente, email_destino, total, subtotal, iva, productos_json, smtp_host, smtp_user, plantilla_usada, asunto_correo, cuerpo_html, estado_envio, mensaje_error, fecha_envio)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id_usuario,
       id_woo,
+      id_cotizaccion || null,  // 👈 se envía null si no viene
       id_empresa,
       nombre_cliente,
       email_destino,
@@ -60,12 +63,14 @@ const createEnvio = async ({
       asunto_correo,
       cuerpo_html,
       estado_envio || 'PENDIENTE',
-      mensaje_error,
-      fecha_envio
+      mensaje_error || null,
+      fecha_envio || null
     ]
   );
+
   return result.insertId;
 };
+
 
 // Actualizar un envío existente
 const updateEnvio = async (id, {

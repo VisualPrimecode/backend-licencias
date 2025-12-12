@@ -4,6 +4,7 @@ const FlowModel = require('../models/flow.model');
 
 
 
+
 /**
  * Obtener transacciones de un solo día
  * Ruta esperada:
@@ -124,6 +125,40 @@ exports.getTransactionsRange = async (req, res) => {
     return res.status(500).json({
       error: "Error obteniendo transacciones para el rango indicado",
       detalle: error.response?.data || error.message
+    });
+  }
+};
+exports.getFailedOrdersWithPayment = async (req, res) => {
+  try {
+    const { wooId, flowId } = req.params;
+
+    if (!wooId || !flowId) {
+      return res.status(400).json({
+        success: false,
+        message: "wooId y flowId son requeridos"
+      });
+    }
+
+    console.log(`🔍 Buscando pedidos fallidos con pago | Woo: ${wooId} | Flow: ${flowId}`);
+
+    // Llamar al modelo
+    const results = await FlowModel.matchFailedOrdersWithFlow(wooId, flowId);
+
+    // Filtrar SOLO los pedidos fallidos que tienen transacción
+    const matched = results.filter(r => r.transaccion !== null);
+
+    return res.json({
+      success: true,
+      total: matched.length,
+      data: matched
+    });
+
+  } catch (error) {
+    console.error("❌ Error en getFailedOrdersWithPayment:", error);
+
+    return res.status(500).json({
+      success: false,
+      error: error.message || "Error interno en el servidor"
     });
   }
 };

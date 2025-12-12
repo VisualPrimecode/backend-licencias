@@ -17,4 +17,7 @@ router.get('/transacciones/:flowId/:fecha', flowController.getTransactions);
 // Ejemplo: GET /flow/transacciones/rango/2025-12-01/2025-12-04
 // ---------------------------------------------
 router.get('/transacciones/rango/:flowId/:inicio/:fin', flowController.getTransactionsRange);
+
+router.get('/match/fallidos/:wooId/:flowId', flowController.getFailedOrdersWithPayment);
+
 module.exports = router;

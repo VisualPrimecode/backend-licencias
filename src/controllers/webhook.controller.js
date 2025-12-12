@@ -484,6 +484,40 @@ async function revertirSeriales(productos) {
     }
   }
 }
+exports.revertirSerialesController = async (req, res) => {
+  console.log("🔔 Webhook recibido: solicitud para revertir seriales");
+
+  const productos = req.body.productos;
+
+  try {
+    if (!Array.isArray(productos)) {
+      return res.status(400).json({ mensaje: "El campo 'productos' debe ser un arreglo" });
+    }
+
+    console.log(`📦 Productos recibidos: ${productos.length}`);
+
+    // Ejecuta la reversión
+    await revertirSeriales(productos);
+
+    return res
+      .status(200)
+      .json({ mensaje: "Seriales revertidos correctamente ✅" });
+
+  } catch (error) {
+    console.error("❌ Error en revertirSerialesController:", error);
+
+    if (error.isIgnored) {
+      return res
+        .status(error.statusCode || 200)
+        .json({ mensaje: error.message });
+    }
+
+    return res
+      .status(500)
+      .json({ mensaje: "Error interno al revertir los seriales" });
+  }
+};
+
 // 👉 Método de prueba para updateSerial2
 exports.testUpdateSerial = async (req, res) => {
   try {

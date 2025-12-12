@@ -56,6 +56,7 @@ exports.createEnvio = async (req, res) => {
     const {
       id_usuario,
       id_woo,
+      id_cotizaccion,     // 👈 Nuevo campo
       id_empresa,
       nombre_cliente,
       email_destino,
@@ -80,6 +81,7 @@ exports.createEnvio = async (req, res) => {
     const id = await Envio.createEnvio({
       id_usuario,
       id_woo,
+      id_cotizaccion,  // 👈 Enviar al modelo
       id_empresa,
       nombre_cliente,
       email_destino,
@@ -103,6 +105,7 @@ exports.createEnvio = async (req, res) => {
     res.status(500).json({ error: 'Error al crear envío' });
   }
 };
+
 
 // Actualizar un envío
 exports.updateEnvio = async (req, res) => {
