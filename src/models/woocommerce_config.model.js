@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const model = require('../models/webhook.model');
+const Config = require('../controllers/cotizacion.controller');
 
 
 // Obtener todas las configuraciones WooCommerce
@@ -14,7 +15,7 @@ const getProducts = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
     const response = await api.get("products", queryParams);
-
+console.log("response", response.data);
 
     // Retornar lista resumida de productos
     return response.data.map(product => ({
@@ -988,8 +989,8 @@ const getVentasPorPais = async (idConfig, { startDate, endDate }) => {
   try {
     // 1️⃣ Obtener pedidos en el rango de fechas
     const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
-    console.log("🐛 Pedidos crudos obtenidos:", JSON.stringify(pedidos, null, 2));
-console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
+ //   console.log("🐛 Pedidos crudos obtenidos:", JSON.stringify(pedidos, null, 2));
+//console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
 
     // 🔄 Tasas de conversión a CLP (ejemplo, actualizar según corresponda)
      const conversionRates = {
@@ -1047,6 +1048,7 @@ console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
     throw error;
   }
 };
+/*
 const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
   console.log("🌎 Generando informe GLOBAL de ventas por país...");
   console.log("📅 Parámetros recibidos:", { startDate, endDate });
@@ -1109,7 +1111,118 @@ const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
     console.error("💥 Error al generar informe GLOBAL de ventas por país:", error);
     throw error;
   }
+};*/
+const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
+  console.log("🌎 Generando informe GLOBAL de ventas por país...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 1️⃣ Definir las tiendas fijas (con idWoo)
+    const tiendas = [
+      { idConfig: 3, idWoo: 1, nombre: "licenciasoriginales" },
+      { idConfig: 4, idWoo: 2, nombre: "licenciassoftware" },
+      { idConfig: 5, idWoo: 3, nombre: "licenciasdigitales" },
+    ];
+
+    // 2️⃣ Ejecutar métodos por tienda
+    const informesTiendas = [];
+
+    for (const tienda of tiendas) {
+      const informeVentas = await getVentasPorPais(
+        tienda.idConfig,
+        { startDate, endDate }
+      );
+      let total_concretado = 0;
+
+const fakeReq = {
+  params: { id: tienda.idConfig },
+  query: {
+    fechaInicio: startDate,
+    fechaFin: endDate,
+  },
 };
+
+const fakeRes = {
+  status: () => ({
+    json: (data) => {
+      total_concretado = data.total_concretado || 0;
+    },
+  }),
+};
+
+await Config.getTotalConcretadoByIdWooPeriodo(fakeReq, fakeRes);
+console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado}`);
+      informesTiendas.push({
+        ...tienda,
+        ...informeVentas,
+        total_concretado,
+      });
+    }
+
+    // 3️⃣ Consolidar resultados por currency
+    const globalVentas = {};
+
+    informesTiendas.forEach((tienda) => {
+      tienda.ventas_por_pais.forEach((venta) => {
+        if (!globalVentas[venta.currency]) {
+          globalVentas[venta.currency] = {
+            currency: venta.currency,
+            total_ventas: 0,
+            total_pedidos: 0,
+            total_ventas_clp: 0,
+            total_ventas_clp_formatted: "0",
+          };
+        }
+
+        globalVentas[venta.currency].total_ventas += venta.total_ventas;
+        globalVentas[venta.currency].total_pedidos += venta.total_pedidos;
+        globalVentas[venta.currency].total_ventas_clp += venta.total_ventas_clp;
+        globalVentas[venta.currency].total_ventas_clp_formatted =
+          globalVentas[venta.currency].total_ventas_clp.toLocaleString("es-CL");
+      });
+    });
+
+    // 4️⃣ Convertir a array ordenado
+    const ventasPorPaisArray = Object.values(globalVentas).sort(
+      (a, b) => b.total_ventas_clp - a.total_ventas_clp
+    );
+
+    // 5️⃣ Totales globales
+    const totalOrders = informesTiendas.reduce(
+      (sum, t) => sum + (t.total_orders || 0),
+      0
+    );
+
+    const totalSalesCLP = ventasPorPaisArray.reduce(
+      (sum, v) => sum + (v.total_ventas_clp || 0),
+      0
+    );
+
+    const totalConcretadoGlobal = informesTiendas.reduce(
+      (sum, t) => sum + (t.total_concretado || 0),
+      0
+    );
+
+    // 6️⃣ Retornar informe final
+    return {
+      total_orders: totalOrders,
+      total_sales: totalSalesCLP,
+      total_sales_formatted: totalSalesCLP.toLocaleString("es-CL"),
+      total_concretado: totalConcretadoGlobal,
+      total_concretado_formatted: totalConcretadoGlobal.toLocaleString("es-CL"),
+      ventas_por_pais: ventasPorPaisArray,
+      detalle_por_tienda: informesTiendas,
+    };
+
+  } catch (error) {
+    console.error(
+      "💥 Error al generar informe GLOBAL de ventas por país:",
+      error
+    );
+    throw error;
+  }
+};
+
 // 📊 Informe GLOBAL: Promedio de ventas por producto
 /*
 const getPromedioProductosGlobal = async ({ startDate, endDate }) => {

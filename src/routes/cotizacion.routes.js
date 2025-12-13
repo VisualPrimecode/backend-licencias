@@ -10,6 +10,14 @@ router.get('/:id', cotizacionController.getCotizacionById);
 
 // Obtener cotizaciones por ID woo (versión antigua)
 router.get('/:id/cotizaciones', cotizacionController.getCotizacionesByIdWooController);
+router.get(
+  '/:id/cotizaciones-con-estado/periodo2',
+  cotizacionController.getTotalConcretadoByIdWooPeriodo
+);
+router.get(
+  '/:id/cotizaciones-con-estado/periodo',
+  cotizacionController.getCotizacionesConEstadoByIdWooPeriodo
+);
 
 // Obtener cotizaciones por ID woo + estado de concretación (NUEVA)
 router.get('/:id/cotizaciones-con-estado', cotizacionController.getCotizacionesConEstadoByIdWoo);

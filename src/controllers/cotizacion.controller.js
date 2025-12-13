@@ -44,6 +44,105 @@ exports.getCotizacionesConEstadoByIdWoo = async (req, res) => {
     return res.status(500).json({ error: "Error al obtener cotizaciones con estado" });
   }
 };
+exports.getCotizacionesConEstadoByIdWooPeriodo = async (req, res) => {
+  try {
+    const { id } = req.params; // id_woo
+    const { fechaInicio, fechaFin } = req.query;
+
+    if (!id) {
+      return res.status(400).json({
+        error: "Falta el parámetro id_woo"
+      });
+    }
+
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({
+        error: "Debe indicar fechaInicio y fechaFin"
+      });
+    }
+
+    const cotizaciones =
+      await Cotizacion.getCotizacionesWithEstadoByPeriodo(
+        id,
+        fechaInicio,
+        fechaFin
+      );
+
+    // 🔹 Procesamiento extra: total de ventas concretadas
+    const totalConcretado = cotizaciones.reduce((acc, cotizacion) => {
+      if (cotizacion.estado_concretacion === 'ENVIADO') {
+        return acc + Number(cotizacion.total || 0);
+      }
+      return acc;
+    }, 0);
+
+    return res.status(200).json({
+      total_concretado: totalConcretado,
+      cantidad_concretadas: cotizaciones.filter(
+        c => c.estado_concretacion === 'ENVIADO'
+      ).length,
+      cotizaciones
+    });
+
+  } catch (error) {
+    console.error(
+      "❌ Error al obtener cotizaciones con estado por período:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Error al obtener cotizaciones con estado por período"
+    });
+  }
+};
+exports.getTotalConcretadoByIdWooPeriodo = async (req, res) => {
+  try {
+    const { id } = req.params; // id_woo
+    const { fechaInicio, fechaFin } = req.query;
+    console.log("Parámetros recibidos:", { id, fechaInicio, fechaFin });
+
+    if (!id) {
+      return res.status(400).json({
+        error: "Falta el parámetro id_woo"
+      });
+    }
+
+    if (!fechaInicio || !fechaFin) {
+      return res.status(400).json({
+        error: "Debe indicar fechaInicio y fechaFin"
+      });
+    }
+
+    const cotizaciones =
+      await Cotizacion.getCotizacionesWithEstadoByPeriodo(
+        id,
+        fechaInicio,
+        fechaFin
+      );
+
+    const totalConcretado = cotizaciones.reduce((acc, cotizacion) => {
+      if (cotizacion.estado_concretacion === 'ENVIADO') {
+        return acc + Number(cotizacion.total || 0);
+      }
+      return acc;
+    }, 0);
+    console.log("Total concretado calculado:", totalConcretado);
+    return res.status(200).json({
+      total_concretado: totalConcretado
+    });
+
+  } catch (error) {
+    console.error(
+      "❌ Error al obtener total concretado por período:",
+      error
+    );
+
+    return res.status(500).json({
+      error: "Error al obtener total concretado por período"
+    });
+  }
+};
+
 
 // Obtener una cotización por ID Woocommerce
 exports.getCotizacionesByIdWooController = async (req, res) => {
@@ -151,3 +250,4 @@ exports.updateEnvioPersonalizadoEstado = async (req, res) => {
     res.status(500).json({ error: 'Error al actualizar estado de cotización' });
   }
 };
+

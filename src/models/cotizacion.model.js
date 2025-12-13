@@ -39,6 +39,32 @@ const getCotizacionesWithEstado = async (id_woo) => {
 
   return rows;
 };
+const getCotizacionesWithEstadoByPeriodo = async (
+  id_woo,
+  fechaInicio,
+  fechaFin
+) => {
+  const [rows] = await db.query(
+    `
+    SELECT 
+      c.*, 
+      e.id AS id_envio,
+      e.estado_envio AS estado_concretacion,
+      e.mensaje_error AS mensaje_error_envio,
+      e.fecha_envio AS fecha_envio_envio
+    FROM cotizaciones_enviadas c
+    LEFT JOIN envios_pesonalizados e
+      ON e.id_cotizaccion = c.id
+    WHERE c.id_woo = ?
+      AND CONVERT_TZ(c.actualizado_en, '+00:00', 'America/Santiago')
+          BETWEEN ? AND ?
+    ORDER BY c.actualizado_en DESC
+    `,
+    [id_woo, fechaInicio, fechaFin]
+  );
+
+  return rows;
+};
 
 const findEnvioByCotizacion = async (id_cotizaccion, id_woo) => {
   const [rows] = await db.query(
@@ -202,6 +228,7 @@ module.exports = {
   createEnvioPersonalizado,
   updateEnvioPersonalizadoEstado,
   findEnvioByCotizacion,
-  getCotizacionesWithEstado
+  getCotizacionesWithEstado,
+  getCotizacionesWithEstadoByPeriodo
 
 };
