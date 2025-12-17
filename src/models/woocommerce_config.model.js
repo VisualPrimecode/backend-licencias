@@ -1193,16 +1193,20 @@ console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado
       0
     );
 
-    const totalSalesCLP = ventasPorPaisArray.reduce(
-      (sum, v) => sum + (v.total_ventas_clp || 0),
-      0
-    );
+    const totalSalesCLP = Math.trunc(
+  ventasPorPaisArray.reduce(
+    (sum, v) => sum + (v.total_ventas_clp || 0),
+    0
+  )
+);
+
 
     const totalConcretadoGlobal = informesTiendas.reduce(
       (sum, t) => sum + (t.total_concretado || 0),
       0
     );
-
+    const totalGeneral = totalSalesCLP + totalConcretadoGlobal;
+    
     // 6️⃣ Retornar informe final
     return {
       total_orders: totalOrders,
@@ -1210,6 +1214,8 @@ console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado
       total_sales_formatted: totalSalesCLP.toLocaleString("es-CL"),
       total_concretado: totalConcretadoGlobal,
       total_concretado_formatted: totalConcretadoGlobal.toLocaleString("es-CL"),
+      total_general: totalGeneral,
+      total_general_formatted: totalGeneral.toLocaleString("es-CL"),
       ventas_por_pais: ventasPorPaisArray,
       detalle_por_tienda: informesTiendas,
     };
