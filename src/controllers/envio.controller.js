@@ -633,9 +633,10 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
     // 🗂️ Registrar en BD (estado PENDIENTE)
      const seguimientoId = await createSeguimiento({
       cotizacion_id: cotizacionData.id,
-      /* 
-      correo_destinatario: cotizacionData.email_destino,*/
-      correo_destinatario: 'claudiorodriguez7778@gmail.com', //para pruebas
+       
+      correo_destinatario: cotizacionData.email_destino,
+      /*
+      correo_destinatario: 'claudiorodriguez7778@gmail.com', *///para pruebas
       asunto: asunto_correo,
       cuerpo: cuerpo_html,
       fecha_programada: correoSeguimientoData.fechaProgramada,

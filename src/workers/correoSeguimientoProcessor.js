@@ -47,9 +47,10 @@ const productosHtml = correoSeguimiento.productos_json.map(p => {
       .replace(/{{numero_cotizacion}}/g, correoSeguimiento.numero_cotizacion || 'N/A');
     // 📤 Enviar correo
     await sendCotizacionCorreo({
-      smtpConfig,/*
-      to: correoSeguimiento.email_destino,*/
-      to: 'claudiorodriguez7778@gmail.com',
+      smtpConfig,
+      to: correoSeguimiento.email_destino,
+      /*
+      to: 'claudiorodriguez7778@gmail.com',*/
       subject,
       text: `Hola ${correoSeguimiento.nombre_cliente}, Nos gustaria conocer tu decision.`,
       html: htmlContent
