@@ -6,7 +6,7 @@ const envioController = require('../controllers/envio.controller');
 // ======================================
 // SEGUIMIENTO DE CORREOS DE COTIZACIÓN
 // ======================================
-
+// /api/correo-seguimiento
 // ---------- ACCIONES ESPECÍFICAS ----------
 
 // Enviar / programar correo de seguimiento

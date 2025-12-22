@@ -574,11 +574,11 @@ const fechaActual = new Date().toISOString().split('T')[0];
 
 exports.EnvioCorreoSeguimiento = async (req, res) => {
   console.log('Datos de la correo de seguimiento:', JSON.stringify(req.body, null, 2));
-
+    const cotizacionData = await getCotizacionById(req.body.cotizacion_id);
 
   try {
     const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(
-      req.body.woocommerce_id,
+      cotizacionData.id_woo,
       'correoSeguimiento'
     );
 
@@ -588,7 +588,7 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
 
     const plantilla = plantillas[0];
     
-    const cotizacionData = await getCotizacionById(req.body.cotizacion_id);
+
     // ✅ Preparar datos base
     const correoSeguimientoData = {
       ...req.body,
@@ -642,6 +642,7 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
       fecha_programada: correoSeguimientoData.fechaProgramada,
       estado: 'pendiente'
     });
+    console.log('ID de seguimiento creado:', seguimientoId);
 const fechaActual = new Date().toISOString().split('T')[0];
 
     await correoSeguimientoQueue.add({

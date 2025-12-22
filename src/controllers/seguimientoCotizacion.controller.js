@@ -3,7 +3,7 @@ const SeguimientoCorreo = require('../models/seguimientocotizacion.model');
 
 /*
   Metodo de envio de correos de seguimiento de cotizacion
-  "createCorreoSeguimiento"
+  "envioCorreoSeguimiento"
 */
 /**
  * Obtener todos los seguimientos de correos
@@ -197,7 +197,8 @@ exports.updateEstadoSeguimiento = async (req, res) => {
   try {
     const { id } = req.params;
     const { estado } = req.body;
-
+    console.log("Estado recibido:", estado);
+    console.log("ID recibido:", id);
     if (!estado) {
       return res.status(400).json({
         error: 'El campo estado es obligatorio'

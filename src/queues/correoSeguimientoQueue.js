@@ -4,7 +4,7 @@ console.log('🔁 Inicializando cola de correos de seguimiento...');
 
 
 
-const correoSeguimientoQueue = new Queue('cotizacionQueue', {
+const correoSeguimientoQueue = new Queue('correoSeguimientoQueue', {
   redis: {
     port: 6379,
     host: 'tough-rat-53689.upstash.io',
@@ -26,11 +26,21 @@ const correoSeguimientoQueue = new Queue('correoSeguimientoQueue', {
 const axios = require('axios');
 
 correoSeguimientoQueue.on('completed', async (job, result) => {
-  const correoSeguimientoId = job.data.id;
+
+  const correoSeguimientoId = job.data.seguimientoId;
   try {
-    await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/correo-seguimiento/${correoSeguimientoId}/estado`, {
-      estado_envio: 'ENVIADO'
+    
+    await axios.patch(`https://backend-licencias-node-mysql.onrender.com/api/correo-seguimiento/${correoSeguimientoId}/estado`, {
+      estado: 'ENVIADO'
     });
+    /*
+    await axios.patch(
+  `http://localhost:3000/api/correo-seguimiento/${correoSeguimientoId}/estado`,
+  {
+    estado: 'ENVIADO'
+  }
+);*/
+
 
     console.log(`📬 Estado de correo de seguimiento actualizado a 'enviado' para ID: ${correoSeguimientoId}`);
   } catch (error) {
@@ -47,7 +57,7 @@ correoSeguimientoQueue.on('failed', async (job, err) => {
   }
 
   try {
-    await axios.put(`https://backend-licencias-node-mysql.onrender.com/api/correo-seguimiento/${correoSeguimientoId}/estado`, {
+    await axios.patch(`https://backend-licencias-node-mysql.onrender.com/api/correo-seguimiento/${correoSeguimientoId}/estado`, {
       estado_envio: 'fallido'
     });
 
