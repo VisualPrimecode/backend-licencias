@@ -1,16 +1,18 @@
 const Envio = require('../models/envio.model');
 const envioQueue = require('../queues/envioQueue'); // Ruta a tu cola
 const cotizacionQueue = require('../queues/cotizacionQueue');
+const correoSeguimientoQueue = require('../queues/correoSeguimientoQueue');
 const envioProductosQueue = require('../queues/productosEnvioQueue');
 const Plantilla = require('../models/plantilla.model');
 const Serial = require('../models/serial.model');
 const WooProductMapping = require('../models/wooProductMapping.model');
 const currencyModel = require('../models/currency.model');
 const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
-const { createCotizacion, createEnvioPersonalizado } = require('../models/cotizacion.model');
+const { createCotizacion, createEnvioPersonalizado, getCotizacionById } = require('../models/cotizacion.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
 const { getProductoInternoByNombreYWooId } = require('../models/wooProductMapping.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
+const { createSeguimiento } = require('../models/seguimientocotizacion.model');
 
 
 // Obtener todos los envíos
@@ -563,6 +565,97 @@ const fechaActual = new Date().toISOString().split('T')[0];
 
     console.log('✅ Job de cotización encolado correctamente');
     return res.status(201).json({ cotizacion_id: id });
+
+  } catch (error) {
+    console.error('❌ Error al crear cotización:', error);
+    return res.status(500).json({ error: 'Error al crear cotización' });
+  }
+};
+
+exports.EnvioCorreoSeguimiento = async (req, res) => {
+  console.log('Datos de la correo de seguimiento:', JSON.stringify(req.body, null, 2));
+
+
+  try {
+    const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(
+      req.body.woocommerce_id,
+      'correoSeguimiento'
+    );
+
+    if (!plantillas || plantillas.length === 0) {
+      return res.status(404).json({ error: 'No se encontró plantilla de seguimiento en esta tienda' });
+    }
+
+    const plantilla = plantillas[0];
+    
+    const cotizacionData = await getCotizacionById(req.body.cotizacion_id);
+    // ✅ Preparar datos base
+    const correoSeguimientoData = {
+      ...req.body,
+      nombre_cliente: cotizacionData.nombre_cliente || 'Cliente',
+      numero_cotizacion: cotizacionData.numero_cotizacion || 'N/A',
+      store_id: req.body.woocommerce_id || 3,
+    };
+   // console.log('datos de la cotizacion obtenidos:', cotizacionData);
+    console.log('Datos de la cotización relevantes:', cotizacionData.email_destino, cotizacionData.nombre_cliente, cotizacionData.id, cotizacionData.id_woo+6
+     );
+    //console.log('Datos del correo de seguimiento procesados:', correoSeguimientoData);
+    console.log('req body:', req.body);
+    // ✅ Validación mínima
+    if (
+      !req.body.cotizacion_id ||
+      !req.body.woocommerce_id ||
+      !cotizacionData.email_destino ||
+      !cotizacionData.nombre_cliente 
+    ) {
+      return res.status(400).json({
+        error: 'Faltan campos obligatorios'
+      });
+    }
+
+    // ✅ Obtener configuración SMTP desde la BD
+    const config = await getSMTPConfigByStoreId(req.body.woocommerce_id);
+    if (!config) {
+      return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
+    }
+
+    const smtpConfig = {
+      host: config.smtp_host,
+      port: config.smtp_port,
+      secure: !!config.smtp_secure,
+      user: config.smtp_username,
+      pass: config.smtp_password
+    };
+
+    // 🧾 Construir HTML básico con placeholders
+    const cuerpo_html = plantilla.cuerpo_html || '';
+    const asunto_correo = plantilla.asunto || 'Correo de Seguimiento';
+
+    // 🗂️ Registrar en BD (estado PENDIENTE)
+     const seguimientoId = await createSeguimiento({
+      cotizacion_id: cotizacionData.id,
+      /* 
+      correo_destinatario: cotizacionData.email_destino,*/
+      correo_destinatario: 'claudiorodriguez7778@gmail.com', //para pruebas
+      asunto: asunto_correo,
+      cuerpo: cuerpo_html,
+      fecha_programada: correoSeguimientoData.fechaProgramada,
+      estado: 'pendiente'
+    });
+const fechaActual = new Date().toISOString().split('T')[0];
+
+    await correoSeguimientoQueue.add({
+      seguimientoId,
+      ...cotizacionData,
+      ...correoSeguimientoData,
+      numero_cotizacion: cotizacionData.numero_cotizacion,           
+  fecha_envio: fechaActual,
+      smtpConfig,
+      plantilla
+        });
+
+    console.log('✅ Job de cotización encolado correctamente');
+    return res.status(201).json({ seguimiento_id: seguimientoId });
 
   } catch (error) {
     console.error('❌ Error al crear cotización:', error);

@@ -1,6 +1,7 @@
 
 const envioQueue = require('./envioQueue');
 const cotizacionQueue = require('./cotizacionQueue');
+const correoSeguimientoQueue = require('./correoSeguimientoQueue');
 const envioProcessor = require('../workers/envioProcessor2');
 const cotizacionProcessor = require('../workers/cotizacionProcessor2');
 const productosEnvioQueue = require('./productosEnvioQueue');
@@ -8,6 +9,7 @@ const productosEnvioProcessor = require('../workers/envioProductosProcessor');
 const wooPollingQueue = require('./wooPollingQueue');
 const axios = require('axios');
 
+const correoSeguimientoProcessor = require('../workers/correoSeguimientoProcessor');
 const { validarEstadoPolling } = require('../utils/validarPolling');
 
 // ⚡ Cada job del polling simplemente hace una petición al servidor
@@ -43,5 +45,6 @@ console.log('📡 Polling de WooCommerce programado cada 2 minutos');
 cotizacionQueue.process(cotizacionProcessor);
 envioQueue.process(envioProcessor);
 productosEnvioQueue.process(productosEnvioProcessor);
+correoSeguimientoQueue.process(correoSeguimientoProcessor);
 
 console.log('📡 Worker de envío conectado a Bull');
