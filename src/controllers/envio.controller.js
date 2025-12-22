@@ -594,7 +594,7 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
       ...req.body,
       nombre_cliente: cotizacionData.nombre_cliente || 'Cliente',
       numero_cotizacion: cotizacionData.numero_cotizacion || 'N/A',
-      store_id: req.body.woocommerce_id || 3,
+      store_id: cotizacionData.id_woo || 3,
     };
    // console.log('datos de la cotizacion obtenidos:', cotizacionData);
     console.log('Datos de la cotización relevantes:', cotizacionData.email_destino, cotizacionData.nombre_cliente, cotizacionData.id, cotizacionData.id_woo+6
@@ -604,7 +604,6 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
     // ✅ Validación mínima
     if (
       !req.body.cotizacion_id ||
-      !req.body.woocommerce_id ||
       !cotizacionData.email_destino ||
       !cotizacionData.nombre_cliente 
     ) {
@@ -614,7 +613,7 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
     }
 
     // ✅ Obtener configuración SMTP desde la BD
-    const config = await getSMTPConfigByStoreId(req.body.woocommerce_id);
+    const config = await getSMTPConfigByStoreId(cotizacionData.id_woo);
     if (!config) {
       return res.status(404).json({ error: 'No se encontró configuración SMTP activa para la tienda' });
     }
