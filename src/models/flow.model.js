@@ -136,6 +136,8 @@ const matchFailedOrdersWithFlow = async (wooConfigId, flowConfigId) => {
     // 3. Obtener transacciones de Flow
     // ------------------------------
     const flowResult = await getTransactionsByRange(startDate, endDate, flowConfigId);
+    console.log(
+  'flowResult datos:\n',
 );
 
     // Aplanar todas las transacciones del rango
