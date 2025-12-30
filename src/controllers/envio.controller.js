@@ -382,22 +382,6 @@ exports.createEnvio = async (req, res) => {
   }
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //envio cotizacion metodo controller
 exports.createCotizacion = async (req, res) => {
   console.log('📝 Creando nueva cotización44s...');
@@ -577,9 +561,19 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
     const cotizacionData = await getCotizacionById(req.body.cotizacion_id);
 
   try {
+     // ✅ Preparar datos base
+    const correoSeguimientoData = {
+      ...req.body,
+      nombre_cliente: cotizacionData.nombre_cliente || 'Cliente',
+      numero_cotizacion: cotizacionData.numero_cotizacion || 'N/A',
+      store_id: cotizacionData.id_woo || 3,
+    };
+    console.log('Datos del correo de seguimiento procesados:', correoSeguimientoData);
+
+    
     const plantillas = await Plantilla.getPlantillaByIdWooYmotivo(
       cotizacionData.id_woo,
-      'correoSeguimiento'
+      req.body.modo_envio
     );
 
     if (!plantillas || plantillas.length === 0) {
@@ -589,13 +583,6 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
     const plantilla = plantillas[0];
     
 
-    // ✅ Preparar datos base
-    const correoSeguimientoData = {
-      ...req.body,
-      nombre_cliente: cotizacionData.nombre_cliente || 'Cliente',
-      numero_cotizacion: cotizacionData.numero_cotizacion || 'N/A',
-      store_id: cotizacionData.id_woo || 3,
-    };
    // console.log('datos de la cotizacion obtenidos:', cotizacionData);
     console.log('Datos de la cotización relevantes:', cotizacionData.email_destino, cotizacionData.nombre_cliente, cotizacionData.id, cotizacionData.id_woo+6
      );
@@ -640,7 +627,9 @@ exports.EnvioCorreoSeguimiento = async (req, res) => {
       asunto: asunto_correo,
       cuerpo: cuerpo_html,
       fecha_programada: correoSeguimientoData.fechaProgramada,
-      estado: 'pendiente'
+      estado: 'pendiente',
+      plantilla: plantilla.id,
+      tipo: plantilla.motivo
     });
     console.log('ID de seguimiento creado:', seguimientoId);
 const fechaActual = new Date().toISOString().split('T')[0];

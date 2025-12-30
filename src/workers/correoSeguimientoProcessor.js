@@ -40,7 +40,8 @@ const productosHtml = correoSeguimiento.productos_json.map(p => {
       .replace(/{{telefono}}/g, plantilla.celular || 'N/A')
       .replace(/{{correo}}/g, plantilla.correo || 'N/A')
       .replace(/{{sitio_web}}/g, plantilla.sitio_web || 'N/A')
-      .replace(/{{nombre_empresa}}/g, plantilla.nombre_empresa || 'N/A');
+      .replace(/{{nombre_empresa}}/g, plantilla.nombre_empresa || 'N/A')
+      .replace(/{{contenido}}/g, correoSeguimiento.contenido|| 'N/A');
     // ✉️ Asunto con reemplazos
     const subject = (plantilla.asunto || 'Tu cotización')
       .replace(/{{nombre_cliente}}/g, correoSeguimiento.nombre_cliente || 'Cliente')

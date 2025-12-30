@@ -47,26 +47,38 @@ const createSeguimiento = async (seguimiento) => {
     asunto,
     cuerpo,
     fecha_programada,
-    estado
+    estado,
+    plantilla = null,
+    tipo = null
   } = seguimiento;
 
   const [result] = await db.query(
     `INSERT INTO seguimiento_correos_cotizacion
-     (cotizacion_id, correo_destinatario, asunto, cuerpo, fecha_programada, estado)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     (
+       cotizacion_id,
+       correo_destinatario,
+       asunto,
+       cuerpo,
+       fecha_programada,
+       estado,
+       plantilla,
+       tipo
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       cotizacion_id,
       correo_destinatario,
       asunto,
       cuerpo,
       fecha_programada,
-      estado || 'pendiente'
+      estado || 'pendiente',
+      plantilla,
+      tipo
     ]
   );
 
   return result.insertId;
 };
-
 /**
  * Actualizar seguimiento de correo
  */
@@ -79,7 +91,9 @@ const updateSeguimiento = async (id, seguimiento) => {
     cuerpo,
     fecha_programada,
     fecha_envio,
-    estado
+    estado,
+    plantilla = null,
+    tipo = null
   } = seguimiento;
 
   const [result] = await db.query(
@@ -89,7 +103,9 @@ const updateSeguimiento = async (id, seguimiento) => {
          cuerpo = ?,
          fecha_programada = ?,
          fecha_envio = ?,
-         estado = ?
+         estado = ?,
+         plantilla = ?,
+         tipo = ?
      WHERE id = ?`,
     [
       correo_destinatario,
@@ -98,12 +114,15 @@ const updateSeguimiento = async (id, seguimiento) => {
       fecha_programada,
       fecha_envio,
       estado,
+      plantilla,
+      tipo,
       id
     ]
   );
 
   return result.affectedRows;
 };
+
 
 /**
  * Eliminar seguimiento

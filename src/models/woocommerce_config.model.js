@@ -328,64 +328,6 @@ if (fullNameMatch || emailMatch) {
   }
 };
 
-/*
-
-//pedidos para envio manual de pedidos
-const getPedidos = async (id, queryParams = {}) => {
-  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
- // console.log("queryParams recibidos:", queryParams);
-
-  try {
-    const api = await model.getWooApiInstanceByConfigId(id);
-
-    // Pasamos los queryParams directamente
-    const response = await api.get("orders", queryParams);
-
-    //console.log("URL final:", response.config.url);
-    //console.log("Base URL:", response.config.baseURL);
-   // console.log("Params:", response.config.params);
-
-    // Filtrar pedidos con estado "completed" o "processing"
-    const completedOrders = response.data.filter(order =>
-      order.status === "completed" || order.status === "processing"
-    );
-
-    const filteredOrders = completedOrders.map(order => ({
-      id: order.id,
-      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
-      customer_email: order.billing.email,
-      status: order.status,
-      total: parseFloat(order.total || 0),
-      payment_method: order.payment_method_title || order.payment_method,
-      products: order.line_items.map(item => {
-        // Buscar en meta_data la entrada con key = _tmcartepo_data
-        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
-
-        const extra_options = Array.isArray(extraOptionData?.value)
-          ? extraOptionData.value.map(opt => ({
-              name: opt.name,
-              value: opt.value,
-              price: opt.price || 0
-            }))
-          : [];
-
-        return {
-          product_id: item.product_id,
-          name: item.name,
-          quantity: item.quantity,
-          variation_id: item.variation_id || null,
-          extra_options
-        };
-      })
-    }));
-
-    return filteredOrders;
-  } catch (error) {
-    console.error("Error obteniendo pedidos:", error.response?.data || error);
-    throw error;
-  }
-};*/
-
 const getPedidos = async (id, queryParams = {}) => {
   console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
 
@@ -461,7 +403,7 @@ const getPedidosFallidos = async (id, queryParams = {}) => {
   try {
     const api = await model.getWooApiInstanceByConfigId(id);
     const response = await api.get("orders", queryParams);
- 
+    
     // Filtrar pedidos con estado "completed" o "processing"
     const completedOrders = response.data.filter(order =>
       order.status === "pending" || order.status === "cancelled" || order.status === "failed"
@@ -503,44 +445,6 @@ const getPedidosFallidos = async (id, queryParams = {}) => {
     throw error;
   }
 };
-/*
-// 📊 Obtener informe de ventas totales en MXN en un rango de fechas
-const getVentasTotalesMXN = async (idConfig, { startDate, endDate }) => {
-  console.log("📊 Calculando ventas totales en MXN...");
-  console.log("📅 Parámetros recibidos:", { startDate, endDate });
-
-  try {
-    // 🔄 Usamos el nuevo método con paginación completa
-    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
-
-    console.log(`📦 Pedidos obtenidos del rango (${startDate} - ${endDate}): ${pedidos.length}`);
-
-    // Filtrar solo los pedidos en MXN
-    const mxnOrders = pedidos.filter(order => order.currency === "MXN");
-
-    // Calcular monto total y cantidades
-    const totalAmount = mxnOrders.reduce((acc, order) => acc + order.total, 0);
-
-    return {
-      total_orders: mxnOrders.length,
-      total_amount_mxn: totalAmount,
-      orders: mxnOrders.map(order => ({
-        id: order.id,
-        total: order.total,
-        currency: order.currency,
-        date_created: order.date_created,
-        customer_name: order.customer_name,
-        customer_email: order.customer_email,
-        payment_method: order.payment_method
-      }))
-    };
-
-  } catch (error) {
-    console.error("💥 Error en getVentasTotalesMXN:", error);
-    throw error;
-  }
-};*/
-// 📊 Obtener informe de ventas totales en MXN en un rango de fechas
 
 
 // 🔎 Obtener TODOS los pedidos dentro de un rango de fechas (con paginación)

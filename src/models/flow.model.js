@@ -116,7 +116,7 @@ const matchFailedOrdersWithFlow = async (wooConfigId, flowConfigId) => {
     // ------------------------------
     const hoy = new Date();
     const ayer = new Date();
-    ayer.setDate(hoy.getDate() - 1);
+    ayer.setDate(hoy.getDate() - 7);// buscar en los últimos 7 días
 
     const formatDate = d => d.toISOString().split("T")[0];
 
@@ -126,12 +126,17 @@ const matchFailedOrdersWithFlow = async (wooConfigId, flowConfigId) => {
     // ------------------------------
     // 2. Obtener pedidos fallidos
     // ------------------------------
-    const failedOrders = await getPedidosFallidos(wooConfigId);
-
+    const failedOrders = await getPedidosFallidos(wooConfigId, {
+        per_page: 100,
+        page: 1,
+        orderby: "date",
+        order: "desc",
+      });
     // ------------------------------
     // 3. Obtener transacciones de Flow
     // ------------------------------
     const flowResult = await getTransactionsByRange(startDate, endDate, flowConfigId);
+);
 
     // Aplanar todas las transacciones del rango
     const allTransactions = [];
