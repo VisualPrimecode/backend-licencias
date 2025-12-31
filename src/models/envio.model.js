@@ -12,7 +12,60 @@ const getEnvioById = async (id) => {
   return rows[0];
 };
 
+const createEnvioPersonalizado = async (datos) => {
+  const {
+    id_usuario,
+    id_woo,
+    id_cotizacion,   // 👈 Nuevo campo
+    numero_pedido,
+    id_empresa,
+    nombre_cliente,
+    email_destino,
+    total,
+    subtotal,
+    iva,
+    productos_json,
+    smtp_host,
+    smtp_user,
+    plantilla_usada,
+    asunto_correo,
+    cuerpo_html,
+    estado_envio = 'PENDIENTE',
+    mensaje_error = null,
+    mensaje_opcional = null // 👈 Nuevo campo opcional
+  } = datos;
 
+  const [result] = await db.query(
+    `INSERT INTO envios_pesonalizados (
+      id_usuario, id_woo, id_cotizaccion, numero_pedido, id_empresa, nombre_cliente, email_destino, total, subtotal, iva,
+      productos_json, smtp_host, smtp_user, plantilla_usada,
+      asunto_correo, cuerpo_html, estado_envio, mensaje_error, mensaje_opcional
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id_usuario,
+      id_woo,
+      id_cotizacion,
+      numero_pedido,
+      id_empresa,
+      nombre_cliente,
+      email_destino,
+      total,
+      subtotal,
+      iva,
+      JSON.stringify(productos_json),
+      smtp_host,
+      smtp_user,
+      plantilla_usada,
+      asunto_correo,
+      cuerpo_html,
+      estado_envio,
+      mensaje_error,
+      mensaje_opcional // 👈 Nuevo valor insertado
+    ]
+  );
+
+  return result.insertId;
+};
 // Crear un nuevo envío
 const createEnvio = async ({
   empresa_id,
@@ -158,5 +211,6 @@ module.exports = {
   deleteEnvio,
   updateEstadoEnvio,
   getEstadoEnvio,
-  existeEnvioPorPedidoWoo
+  existeEnvioPorPedidoWoo,
+  createEnvioPersonalizado
 };

@@ -308,6 +308,84 @@ async function revertirSeriales(productos) {
     }
   }
 }
+// Crear envío personalizado
+exports.createSoloRegistroEnvioPersonalizado = async (req, res) => {
+  try {
+    // Permite uno o varios envíos
+    const envios = Array.isArray(req.body) ? req.body : [req.body];
+
+    const ids = [];
+
+    for (const envio of envios) {
+      const {
+        id_usuario,
+        id_woo,
+        id_cotizacion,
+        numero_pedido,
+        id_empresa,
+        nombre_cliente,
+        email_destino,
+        total,
+        subtotal,
+        iva,
+        productos_json,
+        smtp_host,
+        smtp_user,
+        plantilla_usada,
+        asunto_correo,
+        cuerpo_html,
+        estado_envio,
+        mensaje_error,
+        mensaje_opcional
+      } = envio;
+
+      // 🔴 Validaciones mínimas
+      if (!id_usuario || !email_destino || !productos_json) {
+        return res.status(400).json({
+          error: 'Faltan campos requeridos en uno de los envíos (id_usuario, email_destino, productos_json)'
+        });
+      }
+
+      if (!Array.isArray(productos_json)) {
+        return res.status(400).json({
+          error: 'productos_json debe ser un arreglo'
+        });
+      }
+
+      // Crear envío
+      const id = await Envio.createEnvioPersonalizado({
+        id_usuario,
+        id_woo: id_woo || null,
+        id_cotizacion: id_cotizacion || null,
+        numero_pedido: numero_pedido || null,
+        id_empresa: id_empresa || null,
+        nombre_cliente: nombre_cliente || null,
+        email_destino,
+        total: total || 0,
+        subtotal: subtotal || 0,
+        iva: iva || 0,
+        productos_json,
+        smtp_host: smtp_host || null,
+        smtp_user: smtp_user || null,
+        plantilla_usada: plantilla_usada || null,
+        asunto_correo: asunto_correo || null,
+        cuerpo_html: cuerpo_html || null,
+        estado_envio: estado_envio || 'PENDIENTE',
+        mensaje_error: mensaje_error || null,
+        mensaje_opcional: mensaje_opcional || null
+      });
+
+      ids.push(id);
+    }
+
+    // ✅ Respuesta exitosa
+    res.status(201).json({ ids });
+
+  } catch (error) {
+    console.error('❌ Error al crear envíos personalizados:', error);
+    res.status(500).json({ error: 'Error al crear envíos personalizados' });
+  }
+};
 
 
 exports.createEnvio = async (req, res) => {
