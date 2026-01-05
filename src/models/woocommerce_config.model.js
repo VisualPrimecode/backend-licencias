@@ -406,10 +406,10 @@ const getPedidosFallidos = async (id, queryParams = {}) => {
     
     // Filtrar pedidos con estado "completed" o "processing"
     const completedOrders = response.data.filter(order =>
-      order.status === "pending" || order.status === "cancelled" || order.status === "failed"
+      order.status === "pending" || order.status === "cancelled" || order.status === "failed"|| order.status === "on-hold"
     );
     console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
-
+   
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
       customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),

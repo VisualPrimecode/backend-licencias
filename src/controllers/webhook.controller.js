@@ -11,6 +11,7 @@ const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const Plantilla = require('../models/plantilla.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
+const {getAllPedidosPendientesAun, marcarPedidoPendienteComoEnviado} = require('../models/pedidoPendiente.model');
 
 
 const { updatePollingStatus } = require('../models/pollingControl'); // ✅ nuevo import
@@ -1074,7 +1075,12 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   console.warn(`🚫 Pedido ${numero_pedido} NO SE ENVIARÁ debido a errores en productos.`);
 
   try {
-
+    const { crearSiNoExistePedidoPendiente} = require('../models/pedidoPendiente.model');
+    await crearSiNoExistePedidoPendiente({
+        numero_pedido,
+        id_tienda: wooId,
+        estado: `pendiente`
+      });
     // 🕒 Validación horaria (Chile): NO enviar alertas entre 23:00 y 08:00
     const ahora = new Date();
     const horaChile = ahora.toLocaleString("en-US", { timeZone: "America/Santiago" });
@@ -1091,7 +1097,6 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
 
       // 7️⃣ Alerta consolidada si hubo errores
       console.log(`🚨 Pedido ${numero_pedido} con ${erroresDetectados.length} errores detectados. Verificando alerta...`);
-
       const { crearSiNoExisteAlertaPedido } = require('../models/alertasPedidosModel');
 
       // 📌 1. Revisar si ya existe alerta para este pedido
@@ -1213,31 +1218,13 @@ exports.pedidoCompletado = async (req, res) => {
 };
 
 // controllers/pollingController.js
-
+/*
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
   
   try {
     
     const tiendas = await WooConfig.getAllConfigs();
-/*
-const tiendas = [
-      {
-        id: 5,
-        empresa_id: 12,
-        nombre_alias: 'Licencias Digitales',
-        url: 'https://www.licenciasdigitales.cl/',
-        clave_cliente: 'ck_3011579aa50320e6e40c6c86e691e749dd22842d',
-        clave_secreta: 'cs_07044e0ddcae0647767e0c632ea4a606da0662aa',
-        estado: 'activa',
-        ultima_verificacion: null,
-        notas: 'licencias digitales',
-        queryStringAuth: 1,
-        creado_en: new Date("2025-07-16T21:43:46.000Z")
-      },
-      
-    ];
-   */
     for (const tienda of tiendas) {
       console.log(`📦 Revisando pedidos de tienda: ${tienda.id}`);
 
@@ -1287,9 +1274,147 @@ const tiendas = [
     console.error('❌ Error en ejecutarPolling:', error);
     return res.status(500).json({ mensaje: 'Error interno en el polling' });
   }
+};*/
+exports.ejecutarPolling = async (req, res) => {
+  console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
+
+  try {
+    const tiendas = await WooConfig.getAllConfigs();
+
+    for (const tienda of tiendas) {
+      console.log(`📦 Revisando pedidos de tienda: ${tienda.id}`);
+
+      // 1️⃣ Obtener últimos 50 pedidos de Woo
+      const pedidos = await WooConfig.getPedidos(tienda.id, {
+        per_page: 50,
+        orderby: "date",
+        order: "desc",
+      });
+
+      // Guardamos los números de pedido para exclusión posterior
+      const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
+
+      // 2️⃣ Procesar pedidos nuevos (flujo normal)
+      for (const pedido of pedidos) {
+        const numero_pedido = pedido.number || pedido.id;
+
+        const existe = await Envio.existeEnvioPorPedidoWoo(
+          numero_pedido,
+          tienda.id
+        );
+
+        if (!existe) {
+          console.log(
+            `⚡ Pedido ${numero_pedido} de tienda ${tienda.id} no procesado, intentando lock...`
+          );
+
+          try {
+            await procesarPedidoWoo(
+              pedido,
+              tienda.id,
+              registrarEnvioError
+            );
+
+          } catch (err) {
+            if (err?.isIgnored && err?.statusCode === 202) {
+              console.log(
+                `⏸ Pedido ${numero_pedido} ya estaba en proceso, se ignora en polling.`
+              );
+              continue;
+            }
+
+            console.error(
+              `❌ Error procesando pedido ${numero_pedido} en polling:`,
+              err
+            );
+
+            await registrarEnvioError({
+              woo_config_id: tienda.id,
+              numero_pedido,
+              motivo_error: 'ERROR_POLLING_ENVIO',
+              detalles_error: err.stack || err.message,
+            });
+          }
+        }
+      }
+
+      // 3️⃣ Procesar pedidos pendientes que ya NO están en los últimos 50
+      await procesarPedidosPendientesFueraDeVentana(
+        ultimos50NumerosPedidos
+      );
+    }
+
+    console.log('✅ Polling finalizado correctamente');
+    return res.status(200).json({
+      mensaje: 'Polling ejecutado correctamente ✅'
+    });
+
+  } catch (error) {
+    console.error('❌ Error en ejecutarPolling:', error);
+    return res.status(500).json({
+      mensaje: 'Error interno en el polling'
+    });
+  }
 };
+
 // controllers/webhook_controller.js
 
+/**
+ * Procesa pedidos pendientes que ya no están dentro de los últimos 50 pedidos de Woo
+ * @param {Array<string|number>} ultimos50NumerosPedidos
+ */
+const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos = []) => {
+  console.log('🧩 Procesando pedidos pendientes fuera de los últimos 50');
+
+  // Normalizamos a string para evitar errores de comparación
+  const ultimos50Set = new Set(ultimos50NumerosPedidos.map(String));
+
+  const pedidosPendientes = await getAllPedidosPendientesAun();
+
+  for (const pendiente of pedidosPendientes) {
+    const numeroPedido = String(pendiente.numero_pedido);
+    const idTienda = pendiente.id_tienda;
+
+    // 🔕 Excluir si ya viene en los últimos 50
+    if (ultimos50Set.has(numeroPedido)) {
+      continue;
+    }
+
+    console.log(`🔁 Reintentando pedido pendiente ${numeroPedido} (tienda ${idTienda})`);
+
+    try {
+      // 🔄 Rehidratar pedido desde Woowoo
+      const pedidoWoo = await WooConfig.getPedidoById(idTienda, numeroPedido);
+
+      if (!pedidoWoo) {
+        console.warn(`⚠️ Pedido ${numeroPedido} no encontrado en Woo (tienda ${idTienda})`);
+        continue;
+      }
+
+      // 🚀 Procesar usando la lógica centralizada
+      await procesarPedidoWoo(pedidoWoo, idTienda, registrarEnvioError);
+
+      // ✅ Si no lanza error, marcamos como enviado
+      await marcarPedidoPendienteComoEnviado(numeroPedido, idTienda);
+
+      console.log(`✅ Pedido pendiente ${numeroPedido} marcado como enviado`);
+
+    } catch (error) {
+      // ⏸ Caso de lock activo → no es error real
+      if (error?.isIgnored && error?.statusCode === 202) {
+        console.log(`⏸ Pedido ${numeroPedido} ya estaba en proceso, se omite`);
+        continue;
+      }
+
+      console.error(
+        `❌ Error reprocesando pedido pendiente ${numeroPedido} (tienda ${idTienda}):`,
+        error.message
+      );
+
+      // El error ya queda registrado por procesarPedidoWoo / registrarEnvioError
+    }
+  }
+};
 
 
 
