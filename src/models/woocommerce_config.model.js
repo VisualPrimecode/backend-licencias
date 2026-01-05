@@ -339,19 +339,7 @@ const getPedidos = async (id, queryParams = {}) => {
     const completedOrders = response.data.filter(order =>
       order.status === "completed" || order.status === "processing"
     );
-    console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
- //console.log('datos pedidos sin filtrar',completedOrders);
-completedOrders.forEach(order => {
-  console.log(`\nLine items del pedido ${order.id}:`);
 
-  order.line_items.forEach(item => {
-    console.log('Producto:', item.name);
-    console.log(
-      'Meta data del line item:',
-      JSON.stringify(item.meta_data, null, 2)
-    );
-  });
-});
 
 
     const filteredOrders = completedOrders.map(order => ({
