@@ -1438,6 +1438,11 @@ exports.ejecutarPolling = async (req, res) => {
         }
       }
     }
+    const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
+    console.log('ultimos50NumerosPedidos', ultimos50NumerosPedidos);
+    await procesarPedidosPendientesFueraDeVentana(
+        ultimos50NumerosPedidos
+      );
 
     console.log('✅ Polling finalizado correctamente');
     return res.status(200).json({ mensaje: 'Polling ejecutado correctamente ✅' });
@@ -1593,9 +1598,9 @@ const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos =
 
   // Normalizamos a string para evitar errores de comparación
   const ultimos50Set = new Set(ultimos50NumerosPedidos.map(String));
-
+  console.log('ultimos50Set', ultimos50Set);
   const pedidosPendientes = await getAllPedidosPendientesAun();
-
+console.log('pedidosPendientes', pedidosPendientes);
   for (const pendiente of pedidosPendientes) {
     const numeroPedido = String(pendiente.numero_pedido);
     const idTienda = pendiente.id_tienda;
