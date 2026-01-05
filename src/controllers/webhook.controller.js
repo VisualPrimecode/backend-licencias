@@ -1386,6 +1386,25 @@ exports.ejecutarPolling = async (req, res) => {
         orderby: "date",
         order: "desc",
       });
+      const pedidos2 = await WooConfig.getPedidos2(tienda.id, {
+        per_page: 50,
+        orderby: "date",
+        order: "desc",
+      });
+      for (const pedido of pedidos2) {
+        try {
+          await asegurarPedidoWoo({
+            woo_config_id: tienda.id,
+            pedido
+          });
+        } catch (err) {
+          console.error(
+            `❌ Error asegurando pedido Woo ${pedido.numero_pedido || pedido.id} en tienda ${tienda.id}:`,
+            err
+          );
+          // ⚠️ NO cortamos el polling
+        }
+      }
 
       for (const pedido of pedidos) {
         const numero_pedido = pedido.number || pedido.id;
