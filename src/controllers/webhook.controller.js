@@ -12,6 +12,8 @@ const Plantilla = require('../models/plantilla.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
 const {getAllPedidosPendientesAun, marcarPedidoPendienteComoEnviado} = require('../models/pedidoPendiente.model');
+const { existePedidoWoo, crearPedido } = require('../models/wooPedidos.model');
+
 
 
 const { updatePollingStatus } = require('../models/pollingControl'); // ✅ nuevo import
@@ -1425,6 +1427,40 @@ exports.ejecutarPolling = async (req, res) => {
     return res.status(500).json({ mensaje: 'Error interno en el polling' });
   }
 };*/
+const asegurarPedidoWoo = async ({
+  woo_config_id,
+  pedido
+}) => {
+  const numero_pedido = pedido.numero_pedido || pedido.id;
+  const woo_order_id = pedido.id;
+
+  const existe = await existePedidoWoo({
+    woo_config_id,
+    numero_pedido,
+    woo_order_id
+  });
+
+  if (existe) {
+    return { creado: false };
+  }
+
+  const pedido_id = await crearPedido({
+    woo_config_id,
+    woo_order_id,
+    numero_pedido,
+    status: pedido.status,
+    total: pedido.total,
+    currency: pedido.currency,
+    payment_method: pedido.payment_method,
+    pedido_json: pedido
+  });
+
+  return {
+    creado: true,
+    pedido_id
+  };
+};
+
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
 
@@ -1443,6 +1479,21 @@ exports.ejecutarPolling = async (req, res) => {
 
       // Guardamos los números de pedido para exclusión posterior
       const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
+// 2️⃣ Persistir pedidos (ingesta)
+for (const pedido of pedidos) {
+  try {
+    await asegurarPedidoWoo({
+      woo_config_id: tienda.id,
+      pedido
+    });
+  } catch (err) {
+    console.error(
+      `❌ Error asegurando pedido Woo ${pedido.numero_pedido || pedido.id} en tienda ${tienda.id}:`,
+      err
+    );
+    // ⚠️ NO cortamos el polling
+  }
+}
 
       // 2️⃣ Procesar pedidos nuevos (flujo normal)
       for (const pedido of pedidos) {

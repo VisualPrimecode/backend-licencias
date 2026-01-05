@@ -35,6 +35,7 @@ const productoPersonalizadosRoutes = require('./routes/productosPersonalizados')
 const flowRoutes = require('./routes/flow.routes');
 const pedidoPendienteRoutes = require('./routes/pedidoPendiente.routes');
 const correoSeguimientoRoutes = require('./routes/seguimientoCorreosCotizacion.routes');
+const wooPedidosRoutes = require('./routes/wooPedidos.routes');
 
 
 const app = express();
@@ -72,6 +73,9 @@ app.use('/api/productos-personalizados', productoPersonalizadosRoutes);
 app.use('/api/flow', flowRoutes);
 app.use('/api/pedidos-pendientes', pedidoPendienteRoutes); // Ruta raíz
 app.use('/api/correo-seguimiento', correoSeguimientoRoutes); // Ruta raíz
+app.use('/api/pedidos-pendientes', pedidoPendienteRoutes); 
+app.use('/api/correo-seguimiento', correoSeguimientoRoutes); 
+app.use('/api/pedidos-woo', wooPedidosRoutes); 
 app.get('/', (req, res) => {
   res.send('API de Licencias funcionando 🚀');
 });
