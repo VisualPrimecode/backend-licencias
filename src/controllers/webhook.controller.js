@@ -1476,11 +1476,15 @@ exports.ejecutarPolling = async (req, res) => {
         orderby: "date",
         order: "desc",
       });
-
+      const pedidos2 = await WooConfig.getPedidos2(tienda.id, {
+        per_page: 50,
+        orderby: "date",
+        order: "desc",
+      });
       // Guardamos los números de pedido para exclusión posterior
       const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
 // 2️⃣ Persistir pedidos (ingesta)
-for (const pedido of pedidos) {
+for (const pedido of pedidos2) {
   try {
     await asegurarPedidoWoo({
       woo_config_id: tienda.id,
