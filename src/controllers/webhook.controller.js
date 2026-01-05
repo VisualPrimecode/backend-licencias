@@ -983,7 +983,6 @@ function formatFechaMySQL(dateInput = new Date()) {
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
-/*
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
 
@@ -1200,7 +1199,9 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
     throw error;
   }
-}*/
+}
+
+/*
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
 
@@ -1349,7 +1350,7 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
     throw error;
   }
-}
+}*/
 
 
 exports.pedidoCompletado = async (req, res) => {
@@ -1370,7 +1371,7 @@ exports.pedidoCompletado = async (req, res) => {
 };
 
 // controllers/pollingController.js
-/*
+
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
   
@@ -1426,7 +1427,7 @@ exports.ejecutarPolling = async (req, res) => {
     console.error('❌ Error en ejecutarPolling:', error);
     return res.status(500).json({ mensaje: 'Error interno en el polling' });
   }
-};*/
+};
 const asegurarPedidoWoo = async ({
   woo_config_id,
   pedido
@@ -1460,7 +1461,7 @@ const asegurarPedidoWoo = async ({
     pedido_id
   };
 };
-
+/*
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');
 
@@ -1561,7 +1562,7 @@ for (const pedido of pedidos2) {
     });
   }
 };
-
+*/
 // controllers/webhook_controller.js
 
 /**
