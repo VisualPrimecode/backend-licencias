@@ -1391,6 +1391,12 @@ exports.ejecutarPolling = async (req, res) => {
         orderby: "date",
         order: "desc",
       });
+      const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
+    console.log('ultimos50NumerosPedidos', ultimos50NumerosPedidos);
+    await procesarPedidosPendientesFueraDeVentana(
+        ultimos50NumerosPedidos
+      );
+
       for (const pedido of pedidos2) {
         try {
           await asegurarPedidoWoo({
@@ -1438,12 +1444,7 @@ exports.ejecutarPolling = async (req, res) => {
         }
       }
     }
-    const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
-    console.log('ultimos50NumerosPedidos', ultimos50NumerosPedidos);
-    await procesarPedidosPendientesFueraDeVentana(
-        ultimos50NumerosPedidos
-      );
-
+    
     console.log('✅ Polling finalizado correctamente');
     return res.status(200).json({ mensaje: 'Polling ejecutado correctamente ✅' });
 
