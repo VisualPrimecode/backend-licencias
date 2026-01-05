@@ -981,6 +981,7 @@ function formatFechaMySQL(dateInput = new Date()) {
   return date.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+/*
 async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
   const numero_pedido = data.number || data.id;
 
@@ -1197,6 +1198,155 @@ async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
     console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
     throw error;
   }
+}*/
+async function procesarPedidoWoo(data, wooId, registrarEnvioError) {
+  const numero_pedido = data.number || data.id;
+
+  // 🧠 Estado y resultado del procesamiento (contrato explícito)
+  let envioId = null;
+  let productosProcesados = [];
+  let erroresDetectados = [];
+  let estadoFinal = 'failed'; // conservador por defecto
+
+  try {
+    await validarPedidoWebhook(data, wooId, registrarEnvioError);
+  } catch (error) {
+    console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
+    throw error;
+  }
+
+  // 🔒 0️⃣ Intentar adquirir lock
+  const lockAdquirido = await PedidosLock.adquirirLock(wooId, numero_pedido);
+  if (!lockAdquirido) {
+    const err = new Error(`Pedido ${numero_pedido} ya está en proceso`);
+    err.isIgnored = true;
+    err.statusCode = 202;
+    throw err;
+  }
+
+  try {
+    // 1️⃣ Obtener datos de empresa y usuario
+    const empresaUsuario = await obtenerEmpresaYUsuario(
+      wooId,
+      numero_pedido,
+      registrarEnvioError
+    );
+
+    if (!empresaUsuario) {
+      throw new Error(
+        `No se encontró empresa/usuario para wooId ${wooId}, pedido ${numero_pedido}`
+      );
+    }
+
+    const empresa_id = empresaUsuario.id;
+    const usuario_id = empresaUsuario.usuario_id;
+
+    // 2️⃣ Datos del cliente
+    const billing = data.billing || {};
+    const nombre_cliente =
+      (`${billing.first_name || ''} ${billing.last_name || ''}`.trim() ||
+        data.customer_name ||
+        '');
+    const email_cliente = billing.email || data.customer_email || null;
+    const fecha_envio = data.date_paid || new Date();
+
+    // 3️⃣ Evitar duplicados
+    await verificarDuplicado(
+      numero_pedido,
+      wooId,
+      empresa_id,
+      usuario_id,
+      registrarEnvioError
+    );
+
+    // 4️⃣ Obtener nombre de empresa
+    const empresaName = await getEmpresaNameById(empresa_id);
+
+    // 5️⃣ Procesar productos
+    const productosRaw = data.line_items || data.products || [];
+
+    const resultadoProductos = await procesarProductos(
+      productosRaw,
+      wooId,
+      empresa_id,
+      usuario_id,
+      numero_pedido,
+      registrarEnvioError,
+      data.currency
+    );
+
+    productosProcesados = resultadoProductos.productosProcesados || [];
+    erroresDetectados = resultadoProductos.erroresDetectados || [];
+
+    // 6️⃣ Registrar envío SOLO si no hubo errores
+    if (productosProcesados.length > 0 && erroresDetectados.length === 0) {
+      const envioData = {
+        empresa_id,
+        usuario_id,
+        nombre_cliente,
+        email_cliente,
+        numero_pedido,
+        estado: 'pendiente',
+        fecha_envio: formatFechaMySQL(fecha_envio),
+        woocommerce_id: wooId,
+        woo_idproduct: null
+      };
+
+      const smtpConfig = await obtenerSMTPConfig(
+        wooId,
+        numero_pedido,
+        registrarEnvioError
+      );
+
+      if (!smtpConfig) {
+        throw new Error('No se encontró configuración SMTP activa');
+      }
+
+      envioId = await Envio.createEnvio(envioData);
+
+      await encolarEnvio(
+        envioId,
+        { ...envioData, productos: productosProcesados, empresaName },
+        smtpConfig,
+        empresa_id,
+        usuario_id,
+        numero_pedido,
+        registrarEnvioError
+      );
+    }
+
+    // 7️⃣ Determinar estado final (misma lógica, ahora explícita)
+    estadoFinal = 'completed';
+    if (erroresDetectados.length > 0) {
+      estadoFinal = productosProcesados.length > 0 ? 'partial' : 'failed';
+    }
+
+    // 8️⃣ Liberar lock
+    await PedidosLock.liberarLock(wooId, numero_pedido, estadoFinal);
+
+    // 9️⃣ Retornar contrato explícito
+    return {
+      envioId,                         // null si NO se concretó el envío
+      estadoFinal,                     // completed | partial | failed
+      productosProcesados: productosProcesados.length,
+      erroresDetectados: erroresDetectados.length,
+      envioConcretado: Boolean(envioId)
+    };
+
+  } catch (error) {
+    // 🔴 Error real → liberar lock + registrar
+    await PedidosLock.liberarLock(wooId, numero_pedido, 'failed');
+
+    await registrarEnvioError({
+      woo_config_id: wooId,
+      numero_pedido,
+      motivo_error: 'ERROR_PROCESAR_PEDIDO',
+      detalles_error: error.stack || error.message
+    });
+
+    console.error(`❌ Error procesando pedido ${numero_pedido}:`, error);
+    throw error;
+  }
 }
 
 
@@ -1383,7 +1533,7 @@ const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos =
     console.log(`🔁 Reintentando pedido pendiente ${numeroPedido} (tienda ${idTienda})`);
 
     try {
-      // 🔄 Rehidratar pedido desde Woowoo
+      // 🔄 Rehidratar pedido desde Woo
       const pedidoWoo = await WooConfig.getPedidoById(idTienda, numeroPedido);
 
       if (!pedidoWoo) {
@@ -1391,13 +1541,25 @@ const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos =
         continue;
       }
 
-      // 🚀 Procesar usando la lógica centralizada
-      await procesarPedidoWoo(pedidoWoo, idTienda, registrarEnvioError);
+      // 🚀 Ejecutar motor de procesamiento
+      const resultado = await procesarPedidoWoo(
+        pedidoWoo,
+        idTienda,
+        registrarEnvioError
+      );
 
-      // ✅ Si no lanza error, marcamos como enviado
-      await marcarPedidoPendienteComoEnviado(numeroPedido, idTienda);
-
-      console.log(`✅ Pedido pendiente ${numeroPedido} marcado como enviado`);
+      /**
+       * 🎯 DECISIÓN DE NEGOCIO (Opción 3)
+       * Solo marcamos como enviado si el envío se concretó realmente
+       */
+      if (resultado?.envioId) {
+        await marcarPedidoPendienteComoEnviado(numeroPedido, idTienda);
+        console.log(`✅ Pedido pendiente ${numeroPedido} marcado como enviado`);
+      } else {
+        console.warn(
+          `⏸ Pedido ${numeroPedido} procesado pero NO enviado (envioId vacío). Se mantiene pendiente`
+        );
+      }
 
     } catch (error) {
       // ⏸ Caso de lock activo → no es error real
@@ -1412,6 +1574,7 @@ const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos =
       );
 
       // El error ya queda registrado por procesarPedidoWoo / registrarEnvioError
+      // El pedido permanece pendiente para futuros reintentos
     }
   }
 };
