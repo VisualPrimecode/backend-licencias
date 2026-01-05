@@ -340,6 +340,66 @@ const getPedidos = async (id, queryParams = {}) => {
       order.status === "completed" || order.status === "processing"
     );
     console.log(`Pedidos recibidos de WooCommerce (sin filtrar): ${response.data.length}`);
+ //console.log('datos pedidos sin filtrar',completedOrders);
+completedOrders.forEach(order => {
+  console.log(`\nLine items del pedido ${order.id}:`);
+
+  order.line_items.forEach(item => {
+    console.log('Producto:', item.name);
+    console.log(
+      'Meta data del line item:',
+      JSON.stringify(item.meta_data, null, 2)
+    );
+  });
+});
+
+
+    const filteredOrders = completedOrders.map(order => ({
+      id: order.id,
+      customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
+      customer_email: order.billing.email,
+      status: order.status,
+      total: parseFloat(order.total || 0),
+      currency: order.currency, // 👈 NUEVO CAMPO
+      payment_method: order.payment_method_title || order.payment_method,
+      products: order.line_items.map(item => {
+        const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: opt.price || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      })
+    }));
+
+    return filteredOrders;
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+
+const getPedidos2 = async (id, queryParams = {}) => {
+  console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(id);
+    const response = await api.get("orders", queryParams);
+ 
+    // Filtrar pedidos con estado "completed" o "processing"
+    const completedOrders = response.data;
+
 
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
@@ -1454,5 +1514,6 @@ module.exports = {
   getPedidosNoEnviadosPorTienda,
   getFlowConfigById,
   getPedidosFallidos,
-  updatePedido
+  updatePedido,
+  getPedidos2
 };
