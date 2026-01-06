@@ -1380,12 +1380,13 @@ exports.ejecutarPolling = async (req, res) => {
     const tiendas = await WooConfig.getAllConfigs();
     for (const tienda of tiendas) {
       console.log(`📦 Revisando pedidos de tienda: ${tienda.id}`);
-
+      //solo pedidos completados
       const pedidos = await WooConfig.getPedidos(tienda.id, {
         per_page: 50,
         orderby: "date",
         order: "desc",
       });
+      //pedidos sin filtrar para guardar en la bd
       const pedidos2 = await WooConfig.getPedidos2(tienda.id, {
         per_page: 50,
         orderby: "date",
@@ -1394,7 +1395,8 @@ exports.ejecutarPolling = async (req, res) => {
       const ultimos50NumerosPedidos = pedidos.map(p => String(p.number || p.id));
     console.log('ultimos50NumerosPedidos', ultimos50NumerosPedidos);
     await procesarPedidosPendientesFueraDeVentana(
-        ultimos50NumerosPedidos
+        ultimos50NumerosPedidos,
+        tienda.id
       );
 
       for (const pedido of pedidos2) {
@@ -1594,7 +1596,7 @@ for (const pedido of pedidos2) {
  * Procesa pedidos pendientes que ya no están dentro de los últimos 50 pedidos de Woo
  * @param {Array<string|number>} ultimos50NumerosPedidos
  */
-const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos = []) => {
+const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos = [], woo_id) => {
   console.log('🧩 Procesando pedidos pendientes fuera de los últimos 50');
 
   // Normalizamos a string para evitar errores de comparación
@@ -1607,9 +1609,13 @@ console.log('pedidosPendientes', pedidosPendientes);
     const idTienda = pendiente.id_tienda;
     console.log('numeroPedido', numeroPedido);
     // 🔕 Excluir si ya viene en los últimos 50
-    if (ultimos50Set.has(numeroPedido)) {
-      continue;
-    }
+    
+    if (
+  pendiente.id_tienda === woo_id &&
+  ultimos50Set.has(String(numeroPedido))
+) {
+  continue;
+}
 
     console.log(`🔁 Reintentando pedido pendiente ${numeroPedido} (tienda ${idTienda})`);
 
