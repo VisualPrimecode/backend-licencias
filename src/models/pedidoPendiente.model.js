@@ -107,6 +107,30 @@ const crearSiNoExistePedidoPendiente = async ({ numero_pedido, id_tienda, estado
 
   return { creado: true };
 };
+
+/**
+ * Obtener pedido pendiente si existe
+ */
+const obtenerPedidoPendienteSiExiste = async ({ numero_pedido, id_tienda }) => {
+  console.log("entro en obtenerPedidoPendienteSiExiste");
+
+  const [rows] = await db.query(`
+    SELECT id
+    FROM pedido_pendiente
+    WHERE numero_pedido = ?
+      AND id_tienda = ?
+    LIMIT 1
+  `, [numero_pedido, id_tienda]);
+
+  if (rows.length === 0) {
+    // No existe pedido pendiente
+    return null;
+  }
+
+  // Existe → retornar id
+  return rows[0].id;
+};
+
 /**
  * Marcar pedido pendiente como enviado
  */
@@ -129,5 +153,6 @@ module.exports = {
   deletePedidoPendiente,
   crearSiNoExistePedidoPendiente,
   getAllPedidosPendientesAun,
-  marcarPedidoPendienteComoEnviado
+  marcarPedidoPendienteComoEnviado,
+  obtenerPedidoPendienteSiExiste
 };
