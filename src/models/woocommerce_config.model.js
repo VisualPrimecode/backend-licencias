@@ -337,18 +337,6 @@ const getPedidos = async (id, queryParams = {}) => {
       order.status === "completed" || order.status === "processing"
     );
 
-completedOrders.forEach(order => {
-  console.log(`\nLine items del pedido ${order.id}:`);
-
-  order.line_items.forEach(item => {
-    console.log('Producto:', item.name);
-    console.log(
-      'Meta data del line item:',
-      JSON.stringify(item.meta_data, null, 2)
-    );
-  });
-});
-
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
       customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
