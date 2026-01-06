@@ -11,7 +11,7 @@ const { getSMTPConfigByStoreId } = require('../models/correosConfig.model');
 const Plantilla = require('../models/plantilla.model');
 const {createEnvioError} = require('../models/enviosErrores.model');
 const { getEmpresaNameById } = require('../models/empresa.model');
-const {getAllPedidosPendientesAun, marcarPedidoPendienteComoEnviado} = require('../models/pedidoPendiente.model');
+const {getAllPedidosPendientesAun, marcarPedidoPendienteComoEnviado, obtenerPedidoPendienteSiExiste} = require('../models/pedidoPendiente.model');
 const { existePedidoWoo, crearPedido } = require('../models/wooPedidos.model');
 
 
