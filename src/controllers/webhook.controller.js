@@ -1601,7 +1601,6 @@ const procesarPedidosPendientesFueraDeVentana = async (ultimos50NumerosPedidos =
 
   // Normalizamos a string para evitar errores de comparación
   const ultimos50Set = new Set(ultimos50NumerosPedidos.map(String));
-  console.log('ultimos50Set', ultimos50Set);
   const pedidosPendientes = await getAllPedidosPendientesAun();
 console.log('pedidosPendientes', pedidosPendientes);
   for (const pendiente of pedidosPendientes) {
@@ -1611,9 +1610,12 @@ console.log('pedidosPendientes', pedidosPendientes);
     // 🔕 Excluir si ya viene en los últimos 50
     
     if (
-  pendiente.id_tienda === woo_id &&
+    idTienda === woo_id &&
   ultimos50Set.has(String(numeroPedido))
 ) {
+  console.log(`⏭️ Pedido pendiente ${numeroPedido} (tienda ${idTienda}) aún está en los últimos 50, se omite.`);
+    console.log('ultimos50Set', ultimos50Set);
+
   continue;
 }
 
