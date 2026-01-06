@@ -1430,7 +1430,7 @@ exports.ejecutarPolling = async (req, res) => {
     tienda.id,
     registrarEnvioError
   );
-
+  console.log(`✅ Pedido ${numero_pedido} procesado en polling. Resultado:`, resultado);
   // ✅ Si el pedido se procesó OK y generó envío
   if (resultado?.envioId) {
     const pedidoPendienteId = await obtenerPedidoPendienteSiExiste({
