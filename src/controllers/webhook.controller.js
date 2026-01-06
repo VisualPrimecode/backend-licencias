@@ -1605,7 +1605,7 @@ console.log('pedidosPendientes', pedidosPendientes);
   for (const pendiente of pedidosPendientes) {
     const numeroPedido = String(pendiente.numero_pedido);
     const idTienda = pendiente.id_tienda;
-
+    console.log('numeroPedido', numeroPedido);
     // 🔕 Excluir si ya viene en los últimos 50
     if (ultimos50Set.has(numeroPedido)) {
       continue;
@@ -1614,6 +1614,7 @@ console.log('pedidosPendientes', pedidosPendientes);
     console.log(`🔁 Reintentando pedido pendiente ${numeroPedido} (tienda ${idTienda})`);
 
     try {
+      console.log("entro al try catch de procesarPedidosPendientesFueraDeVentana");
       // 🔄 Rehidratar pedido desde Woo
       const pedidoWoo = await WooConfig.getPedidoById(idTienda, numeroPedido);
 
