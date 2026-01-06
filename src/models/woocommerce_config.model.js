@@ -156,6 +156,7 @@ const getPedidoById = async (idConfig, pedidoId) => {
     const order = response.data;
     console.log(`✅ Pedido obtenido: ID ${order.id}, Estado: ${order.status}`);
     console.log("Detalles del pedido:", order);
+  //  console.log("Detalles del pedido:", order);
     if (!order) {
       console.log("❌ Pedido no encontrado.");
       return null;
