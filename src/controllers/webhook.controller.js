@@ -1425,7 +1425,24 @@ exports.ejecutarPolling = async (req, res) => {
 
           try {
             // 👉 Usar el mismo método genérico de procesar con lock
-            await procesarPedidoWoo(pedido, tienda.id, registrarEnvioError);
+            const resultado = await procesarPedidoWoo(
+    pedido,
+    tienda.id,
+    registrarEnvioError
+  );
+
+  // ✅ Si el pedido se procesó OK y generó envío
+  if (resultado?.envioId) {
+    const pedidoPendienteId = await obtenerPedidoPendienteSiExiste({
+      numero_pedido,
+      id_tienda: tienda.id
+    });
+
+    if (pedidoPendienteId) {
+      await marcarPedidoPendienteComoEnviado(numero_pedido, tienda.id);
+      console.log(`✅ Pedido ${numero_pedido} estaba pendiente y fue marcado como enviado desde polling`);
+    }
+  }
 
           } catch (err) {
             // Caso especial: pedido ya estaba siendo procesado por otro flujo
