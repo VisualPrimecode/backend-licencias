@@ -154,15 +154,11 @@ const getPedidoById = async (idConfig, pedidoId) => {
 
     const response = await api.get(`orders/${pedidoId}`);
     const order = response.data;
-    console.log(`✅ Pedido obtenido: ID ${order.id}, Estado: ${order.status}`);
-    console.log("Detalles del pedido:", order);
-  //  console.log("Detalles del pedido:", order);
+   
     if (!order) {
       console.log("❌ Pedido no encontrado.");
       return null;
     }
-
-   
 
     return {
       id: order.id,
@@ -341,7 +337,17 @@ const getPedidos = async (id, queryParams = {}) => {
       order.status === "completed" || order.status === "processing"
     );
 
+completedOrders.forEach(order => {
+  console.log(`\nLine items del pedido ${order.id}:`);
 
+  order.line_items.forEach(item => {
+    console.log('Producto:', item.name);
+    console.log(
+      'Meta data del line item:',
+      JSON.stringify(item.meta_data, null, 2)
+    );
+  });
+});
 
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
@@ -371,7 +377,6 @@ const getPedidos = async (id, queryParams = {}) => {
         };
       })
     }));
-
     return filteredOrders;
   } catch (error) {
     console.error("Error obteniendo pedidos:", error.response?.data || error);
