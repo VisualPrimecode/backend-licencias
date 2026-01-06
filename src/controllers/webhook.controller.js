@@ -1609,16 +1609,21 @@ console.log('pedidosPendientes', pedidosPendientes);
     console.log('numeroPedido', numeroPedido);
     // 🔕 Excluir si ya viene en los últimos 50
     
-    if (
-    idTienda === woo_id &&
-  ultimos50Set.has(String(numeroPedido))
-) {
-  console.log(`⏭️ Pedido pendiente ${numeroPedido} (tienda ${idTienda}) aún está en los últimos 50, se omite.`);
-    console.log('ultimos50Set', ultimos50Set);
-
+    // 🔕 1️⃣ EXCLUIR pedidos que NO son de la tienda que se está procesando
+if (idTienda !== woo_id) {
+  console.log(
+    `⏭️ Pedido ${numeroPedido} ignorado: pertenece a tienda ${idTienda}, no a la tienda actual ${woo_id}`
+  );
   continue;
 }
 
+// 🔕 2️⃣ EXCLUIR pedidos de la tienda actual que aún están en los últimos 50
+if (ultimos50Set.has(numeroPedido)) {
+  console.log(
+    `⏭️ Pedido pendiente ${numeroPedido} (tienda ${idTienda}) aún está en los últimos 50, se omite.`
+  );
+  continue;
+}
     console.log(`🔁 Reintentando pedido pendiente ${numeroPedido} (tienda ${idTienda})`);
 
     try {
