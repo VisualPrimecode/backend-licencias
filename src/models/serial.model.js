@@ -1,3 +1,4 @@
+const { get } = require('../app');
 const db = require('../config/db');
 
 // Obtener todos los seriales
@@ -16,6 +17,31 @@ const getSerialesByNumeroPedido = async (id) => {
   const [rows] = await db.query('SELECT * FROM seriales WHERE numero_pedido = ?', [id]);
   return rows;
 };
+
+const getSerialesByPedidos = async (pedidos) => {
+  if (!pedidos || pedidos.length === 0) return [];
+
+  // Construimos los placeholders (?, ?) dinámicamente
+  const placeholders = pedidos.map(() => '(?, ?)').join(', ');
+
+  // Aplanamos los valores
+  const values = pedidos.flatMap(p => [p.numero_pedido, p.woo_id]);
+
+  const sql = `
+    SELECT 
+      numero_pedido,
+      woocommerce_id,
+      codigo,
+      producto_id,
+      estado
+    FROM seriales
+    WHERE (numero_pedido, woocommerce_id) IN (${placeholders})
+  `;
+
+  const [rows] = await db.query(sql, values);
+  return rows;
+};
+
 
 // Crear un nuevo serial
 const createSerial = async ({
@@ -476,5 +502,6 @@ getSerialesByNumeroPedido,
     getSerialesByWooData,
     updateSerialEstado,
     searchSeriales,
-    getSerialesPaginated
+    getSerialesPaginated,
+    getSerialesByPedidos
 };

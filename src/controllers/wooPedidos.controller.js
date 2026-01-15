@@ -155,4 +155,52 @@ exports.existePedidoWoo = async (req, res) => {
     });
   }
 };
+exports.GuardarPedidosPorTienda = async (req, res) => {
+  console.log('📊 Iniciando guardado pedidos desde woocommerce');
 
+  try {
+    const { id } = req.params; // woo_config_id
+    const { startDate, endDate } = req.query;
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Falta el id de la tienda (woo_config_id)'
+      });
+    }
+
+    // 👉 Ejecutar proceso principal
+    const resultado = await WooPedidos.guardarPedidosDesdeWoo(
+      Number(id),
+      { startDate, endDate }
+    );
+
+    /**
+     * resultado esperado desde el servicio:
+     * {
+     *   pedidosProcesados,
+     *   clientesNuevos,
+     *   clientesExistentes,
+     *   pedidosOmitidos
+     * }
+     */
+
+    res.json({
+      ok: true,
+      store_id: Number(id),
+      range: {
+        startDate: startDate || null,
+        endDate: endDate || null
+      },
+      summary: resultado
+    });
+
+  } catch (error) {
+    console.error('💥 Error al guardar los pedidos:', error);
+
+    res.status(500).json({
+      ok: false,
+      error: 'Error al guardar los pedidos desde woocommerce'
+    });
+  }
+};

@@ -20,6 +20,11 @@ router.get(
   wooPedidosController.getPedidoPorNumero
 );
 
+router.get(
+  '/woo/:id/guardar-datos-pedidos',
+  wooPedidosController.GuardarPedidosPorTienda
+);
+
 // Crear pedido
 router.post(
   '/woo-pedidos',

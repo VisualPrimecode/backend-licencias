@@ -1476,7 +1476,7 @@ const asegurarPedidoWoo = async ({
   woo_config_id,
   pedido
 }) => {
-  const numero_pedido = pedido.numero_pedido || pedido.id;
+  const numero_pedido = pedido.numero_pedido || pedido.number || pedido.id;
   const woo_order_id = pedido.id;
 
   const existe = await existePedidoWoo({
@@ -1489,14 +1489,55 @@ const asegurarPedidoWoo = async ({
     return { creado: false };
   }
 
+  // 🔧 Normalización de productos y extras
+  const normalizarProductos = (products = []) => {
+    const productosLimpios = [];
+    const extraOptions = [];
+
+    for (const product of products) {
+      const { extra_options, ...productoBase } = product;
+
+      productosLimpios.push(productoBase);
+
+      if (Array.isArray(extra_options) && extra_options.length > 0) {
+        for (const extra of extra_options) {
+          if (!extra.name || !extra.value) continue;
+
+          extraOptions.push({
+            product_id: product.product_id,
+            product_name: product.name,
+            name: extra.name,
+            value: extra.value,
+            price: Number(extra.price) || 0
+          });
+        }
+      }
+    }
+
+    return {
+      products: productosLimpios,
+      extraoptions: extraOptions
+    };
+  };
+
+  const { products, extraoptions } = normalizarProductos(pedido.products);
+
   const pedido_id = await crearPedido({
     woo_config_id,
     woo_order_id,
     numero_pedido,
     status: pedido.status,
-    total: pedido.total,
+    total: Number(pedido.total) || 0,
     currency: pedido.currency,
-    payment_method: pedido.payment_method,
+    payment_method: pedido.payment_method ?? null,
+
+    // 🆕 campos nuevos
+    fecha_pedido: pedido.date ?? null,
+    name: pedido.customer_name ?? null,
+    email: pedido.customer_email ?? null,
+    products: products.length ? JSON.stringify(products) : null,
+    extraoptions: extraoptions.length ? JSON.stringify(extraoptions) : null,
+
     pedido_json: pedido
   });
 
@@ -1505,6 +1546,7 @@ const asegurarPedidoWoo = async ({
     pedido_id
   };
 };
+
 /*
 exports.ejecutarPolling = async (req, res) => {
   console.log('⏱️ Ejecutando polling de WooCommerce desde API...');

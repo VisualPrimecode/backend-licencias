@@ -94,6 +94,43 @@ const getProductoInternoId = async (woocommerce_id, woo_product_id) => {
     throw new Error('Error al buscar producto interno, probablemente falta mapear el producto: ' + error.message);
   }
 };
+const getProductosInternosIds = async (woocommerce_id, woo_product_ids) => {
+  console.log('Llegó al método del modelo (lista)');
+  console.log('woocommerce_id:', woocommerce_id);
+  console.log('woo_product_ids:', woo_product_ids);
+
+  if (!Array.isArray(woo_product_ids) || woo_product_ids.length === 0) {
+    return [];
+  }
+
+  try {
+    const [rows] = await db.query(
+      `SELECT woo_product_id, producto_interno_id
+       FROM woo_product_mappings
+       WHERE woocommerce_id = ?
+       AND woo_product_id IN (${woo_product_ids.map(() => '?').join(',')})`,
+      [woocommerce_id, ...woo_product_ids]
+    );
+
+    console.log('Resultado de la consulta:', rows);
+
+    // Devolvemos una lista alineada con la entrada
+    return woo_product_ids.map(woo_product_id => {
+      const found = rows.find(r => r.woo_product_id === woo_product_id);
+      return {
+        woo_product_id,
+        producto_interno_id: found ? found.producto_interno_id : null
+      };
+    });
+
+  } catch (error) {
+    throw new Error(
+      'Error al buscar productos internos, probablemente falten mapeos: ' +
+      error.message
+    );
+  }
+};
+
 const getProductoInternoByNombreYWooId = async (nombreProducto, woocommerce_id) => {
   console.log('Llegó al método del modelo');
   console.log('nombreProducto:', nombreProducto);
@@ -142,5 +179,6 @@ module.exports = {
   deleteMapping,
   getMappingByIdWoo,
   getProductoInternoId,
-  getProductoInternoByNombreYWooId
+  getProductoInternoByNombreYWooId,
+  getProductosInternosIds
 };

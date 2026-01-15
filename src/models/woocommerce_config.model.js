@@ -1,6 +1,8 @@
 const db = require('../config/db');
 const model = require('../models/webhook.model');
 const Config = require('../controllers/cotizacion.controller');
+const serialModel = require('../models/serial.model');
+const WooMap = require('../models/wooProductMapping.model');
 
 
 // Obtener todas las configuraciones WooCommerce
@@ -325,6 +327,7 @@ if (fullNameMatch || emailMatch) {
   }
 };
 
+/*
 const getPedidos = async (id, queryParams = {}) => {
   console.log("Obteniendo pedidos para el WooCommerce con ID:", id);
 
@@ -336,12 +339,14 @@ const getPedidos = async (id, queryParams = {}) => {
     const completedOrders = response.data.filter(order =>
       order.status === "completed" || order.status === "processing"
     );
-
+    console.log(`Pedidos recibidos de WooCommerce (sin filtrar):`, response.data);
+    
     const filteredOrders = completedOrders.map(order => ({
       id: order.id,
       customer_name: `${order.billing.first_name} ${order.billing.last_name}`.trim(),
       customer_email: order.billing.email,
       status: order.status,
+      date_completed: order.date_completed,
       total: parseFloat(order.total || 0),
       currency: order.currency, // 👈 NUEVO CAMPO
       payment_method: order.payment_method_title || order.payment_method,
@@ -368,6 +373,677 @@ const getPedidos = async (id, queryParams = {}) => {
     return filteredOrders;
   } catch (error) {
     console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+*/
+//version que retorna fecha de modificacion y seriales asociados
+
+const getPedidos = async (wooId, queryParams = {}) => {
+  console.log("Obteniendo pedidos para WooCommerce ID:", wooId);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(wooId);
+    const response = await api.get("orders", queryParams);
+
+    const VALID_STATUSES = new Set(["completed", "processing"]);
+
+    // 1️⃣ Normalizamos pedidos desde Woo
+    const pedidos = response.data
+      .filter(order => VALID_STATUSES.has(order.status))
+      .map(order => {
+        const billing = order.billing || {};
+        const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+
+        return {
+          id: order.id, // numero_pedido
+          woo_id: wooId,
+          customer_name: `${billing.first_name || ""} ${billing.last_name || ""}`.trim(),
+          customer_email: billing.email || null,
+          status: order.status,
+          date_completed: order.date_modified,
+          total: parseFloat(order.total) || 0,
+          currency: order.currency || null,
+          payment_method: order.payment_method_title ?? order.payment_method ?? "unknown",
+          products: lineItems.map(item => {
+            const extraOptionData = (item.meta_data || [])
+              .find(meta => meta.key === '_tmcartepo_data');
+
+            const extra_options = Array.isArray(extraOptionData?.value)
+              ? extraOptionData.value.map(opt => ({
+                  name: opt.name,
+                  value: opt.value,
+                  price: parseFloat(opt.price) || 0
+                }))
+              : [];
+
+            return {
+              product_id: item.product_id,
+              name: item.name,
+              quantity: item.quantity,
+              variation_id: item.variation_id || null,
+              extra_options
+            };
+          })
+        };
+      });
+
+    if (pedidos.length === 0) {
+      return [];
+    }
+
+    // 2️⃣ Obtenemos seriales asociados a los pedidos
+    const seriales = await serialModel.getSerialesByPedidos(
+      pedidos.map(p => ({
+        numero_pedido: p.id,
+        woo_id: p.woo_id
+      }))
+    );
+
+    // 3️⃣ Agrupamos seriales por pedido
+    const serialesPorPedido = seriales.reduce((acc, serial) => {
+      const pedidoId = serial.numero_pedido;
+
+      if (!acc[pedidoId]) {
+        acc[pedidoId] = [];
+      }
+
+      acc[pedidoId].push({
+        codigo: serial.codigo,
+        producto_id: serial.producto_id,
+      });
+
+      return acc;
+    }, {});
+
+    // 4️⃣ Adjuntamos seriales a cada pedido (nivel pedido)
+    const pedidosFinales = pedidos.map(pedido => ({
+      ...pedido,
+      seriales: serialesPorPedido[pedido.id] || []
+    }));
+    console.log("Pedidos finales con seriales adjuntos:", pedidosFinales);
+    return pedidosFinales;
+
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+//get pedidos 365 1 año pero debe escalar a un metodo que reciba el producto_id
+/*
+const getPedidosFiltradoProductos = async (wooId, queryParams = {}) => {
+  console.log("Obteniendo pedidos para WooCommerce ID:", wooId);
+
+  const VALID_STATUSES = new Set(["completed", "processing"]);
+  const OFFICE_365_INTERNO_ID = 330;
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(wooId);
+    const response = await api.get("orders", queryParams);
+
+    // 1️⃣ Filtrar pedidos válidos por estado
+    const pedidosWoo = response.data.filter(order =>
+      VALID_STATUSES.has(order.status)
+    );
+
+    if (pedidosWoo.length === 0) {
+      return [];
+    }
+
+    // 2️⃣ Extraer TODOS los woo_product_ids únicos
+    const wooProductIds = [
+      ...new Set(
+        pedidosWoo.flatMap(order =>
+          Array.isArray(order.line_items)
+            ? order.line_items.map(item => item.product_id)
+            : []
+        )
+      )
+    ];
+
+    // 3️⃣ Mapear Woo → producto interno (una sola query)
+    const productosMapeados = await WooMap.getProductosInternosIds(
+      wooId,
+      wooProductIds
+    );
+
+    const wooToInternoMap = new Map(
+      productosMapeados.map(p => [p.woo_product_id, p.producto_interno_id])
+    );
+
+    // 4️⃣ Normalizar pedidos + enriquecer productos + fechas
+    const pedidosNormalizados = pedidosWoo.map(order => {
+      const billing = order.billing || {};
+      const lineItems = Array.isArray(order.line_items) ? order.line_items : [];
+
+      const dateCompleted = order.date_modified
+        ? new Date(order.date_modified)
+        : null;
+
+      const expirationDate = dateCompleted
+        ? new Date(dateCompleted)
+        : null;
+
+      if (expirationDate) {
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+      }
+
+      const products = lineItems.map(item => {
+        const extraOptionData = (item.meta_data || [])
+          .find(meta => meta.key === "_tmcartepo_data");
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: parseFloat(opt.price) || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          producto_interno_id: wooToInternoMap.get(item.product_id) || null,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      });
+
+      return {
+        id: order.id,
+        woo_id: wooId,
+        customer_name: `${billing.first_name || ""} ${billing.last_name || ""}`.trim(),
+        customer_email: billing.email || null,
+        status: order.status,
+        date_completed: dateCompleted ? dateCompleted.toISOString() : null,
+        expiration_date: expirationDate ? expirationDate.toISOString() : null,
+        total: parseFloat(order.total) || 0,
+        currency: order.currency || null,
+        payment_method:
+          order.payment_method_title ??
+          order.payment_method ??
+          "unknown",
+        products
+      };
+    });
+
+    // 5️⃣ Filtrar pedidos con AL MENOS un Office 365 (ID interno)
+    const pedidosFiltrados = pedidosNormalizados.filter(pedido =>
+      pedido.products.some(
+        p => p.producto_interno_id === OFFICE_365_INTERNO_ID
+      )
+    );
+
+    if (pedidosFiltrados.length === 0) {
+      return [];
+    }
+
+    // 6️⃣ Obtener seriales asociados
+    const seriales = await serialModel.getSerialesByPedidos(
+      pedidosFiltrados.map(p => ({
+        numero_pedido: p.id,
+        woo_id: p.woo_id
+      }))
+    );
+
+    // 7️⃣ Agrupar seriales por pedido
+    const serialesPorPedido = seriales.reduce((acc, serial) => {
+      if (!acc[serial.numero_pedido]) {
+        acc[serial.numero_pedido] = [];
+      }
+
+      acc[serial.numero_pedido].push({
+        codigo: serial.codigo,
+        producto_id: serial.producto_id
+      });
+
+      return acc;
+    }, {});
+
+    // 8️⃣ Adjuntar seriales a pedidos
+    const pedidosFinales = pedidosFiltrados.map(pedido => ({
+      ...pedido,
+      seriales: serialesPorPedido[pedido.id] || []
+    }));
+
+    console.log("Pedidos finales con Office 365:", pedidosFinales);
+    return pedidosFinales;
+
+  } catch (error) {
+    console.error("Error obteniendo pedidos:", error.response?.data || error);
+    throw error;
+  }
+};
+*/
+/*
+const getPedidosFiltradoProductos = async (
+  wooId,
+  productoInternoIds = [],
+  queryParams = {}
+) => {
+  console.log("Obteniendo pedidos para WooCommerce ID:", wooId);
+
+  const VALID_STATUSES = new Set(["completed", "processing"]);
+  const PRODUCTOS_INTERNOS_SET = new Set(productoInternoIds);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(wooId);
+    const response = await api.get("orders", queryParams);
+
+    // 1️⃣ Filtrar pedidos válidos por estado
+    const pedidosWoo = response.data.filter(order =>
+      VALID_STATUSES.has(order.status)
+    );
+
+    if (pedidosWoo.length === 0) {
+      return [];
+    }
+
+    // 2️⃣ Extraer TODOS los woo_product_ids únicos
+    const wooProductIds = [
+      ...new Set(
+        pedidosWoo.flatMap(order =>
+          Array.isArray(order.line_items)
+            ? order.line_items
+                .map(item => item.product_id)
+                .filter(id => id && id > 0)
+            : []
+        )
+      )
+    ];
+
+    if (wooProductIds.length === 0) {
+      return [];
+    }
+
+    // 3️⃣ Mapear Woo → producto interno (una sola query)
+    const productosMapeados = await WooMap.getProductosInternosIds(
+      wooId,
+      wooProductIds
+    );
+
+    const wooToInternoMap = new Map(
+      productosMapeados.map(p => [
+        p.woo_product_id,
+        p.producto_interno_id
+      ])
+    );
+
+    // 4️⃣ Normalizar pedidos + enriquecer productos + fechas
+    const pedidosNormalizados = pedidosWoo.map(order => {
+      const billing = order.billing || {};
+      const lineItems = Array.isArray(order.line_items)
+        ? order.line_items
+        : [];
+
+      const dateCompleted = order.date_completed
+        ? new Date(order.date_completed)
+        : order.date_modified
+        ? new Date(order.date_modified)
+        : null;
+
+      const expirationDate = dateCompleted
+        ? new Date(dateCompleted)
+        : null;
+
+      if (expirationDate) {
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+      }
+
+      const products = lineItems.map(item => {
+        const extraOptionData = (item.meta_data || []).find(
+          meta => meta.key === "_tmcartepo_data"
+        );
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: parseFloat(opt.price) || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          producto_interno_id:
+            wooToInternoMap.get(item.product_id) || null,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      });
+
+      return {
+        id: order.id,
+        woo_id: wooId,
+        customer_name: `${billing.first_name || ""} ${billing.last_name || ""}`.trim(),
+        customer_email: billing.email || null,
+        status: order.status,
+        date_completed: dateCompleted
+          ? dateCompleted.toISOString()
+          : null,
+        expiration_date: expirationDate
+          ? expirationDate.toISOString()
+          : null,
+        total: parseFloat(order.total) || 0,
+        currency: order.currency || null,
+        payment_method:
+          order.payment_method_title ??
+          order.payment_method ??
+          "unknown",
+        products
+      };
+    });
+
+    // 5️⃣ Filtrar pedidos que contengan AL MENOS UNO
+    //    de los productos internos solicitados
+    const pedidosFiltrados = pedidosNormalizados.filter(pedido =>
+      pedido.products.some(
+        p =>
+          p.producto_interno_id &&
+          PRODUCTOS_INTERNOS_SET.has(p.producto_interno_id)
+      )
+    );
+
+    if (pedidosFiltrados.length === 0) {
+      return [];
+    }
+
+    // 6️⃣ Obtener seriales asociados
+    const seriales = await serialModel.getSerialesByPedidos(
+      pedidosFiltrados.map(p => ({
+        numero_pedido: p.id,
+        woo_id: p.woo_id
+      }))
+    );
+
+    // 7️⃣ Agrupar seriales por pedido
+    const serialesPorPedido = seriales.reduce((acc, serial) => {
+      if (!acc[serial.numero_pedido]) {
+        acc[serial.numero_pedido] = [];
+      }
+
+      acc[serial.numero_pedido].push({
+        codigo: serial.codigo,
+        producto_id: serial.producto_id
+      });
+
+      return acc;
+    }, {});
+
+    // 8️⃣ Adjuntar seriales a pedidos
+    const pedidosFinales = pedidosFiltrados.map(pedido => ({
+      ...pedido,
+      seriales: serialesPorPedido[pedido.id] || []
+    }));
+
+   // console.log("Pedidos finales filtrados:", pedidosFinales);
+    return pedidosFinales;
+
+  } catch (error) {
+    console.error(
+      "Error obteniendo pedidos:",
+      error.response?.data || error
+    );
+    throw error;
+  }
+};*/
+const getPedidosFiltradoProductos = async (
+  wooId,
+  productoInternoIds = [],
+  queryParams = {}
+) => {
+  console.log('📦 Obteniendo pedidos para WooCommerce ID:', wooId);
+
+  const VALID_STATUSES = new Set(['completed', 'processing']);
+  const PRODUCTOS_INTERNOS_SET = new Set(productoInternoIds);
+
+  try {
+    const api = await model.getWooApiInstanceByConfigId(wooId);
+
+    // ─────────────────────────────
+    // 1️⃣ Normalizar paginación (por tienda)
+    // ─────────────────────────────
+    const page = Math.max(parseInt(queryParams.page, 10) || 1, 1);
+    const per_page = Math.min(
+      Math.max(parseInt(queryParams.per_page, 10) || 10, 1),
+      100
+    );
+
+    // Empujar filtros a Woo cuando sea posible
+    const wooQueryParams = {
+      ...queryParams,
+      page,
+      per_page,
+      status: 'completed,processing'
+    };
+
+    const response = await api.get('orders', wooQueryParams);
+    const ordersRaw = Array.isArray(response.data) ? response.data : [];
+
+    console.log(
+      `➡️ Woo ID ${wooId}: ${ordersRaw.length} pedidos recibidos (page=${page})`
+    );
+
+    if (ordersRaw.length === 0) {
+      return [];
+    }
+
+    // ─────────────────────────────
+    // 2️⃣ Extraer IDs Woo de productos
+    // ─────────────────────────────
+    const wooProductIds = [
+      ...new Set(
+        ordersRaw.flatMap(order =>
+          Array.isArray(order.line_items)
+            ? order.line_items
+                .map(item => item.product_id)
+                .filter(id => id && id > 0)
+            : []
+        )
+      )
+    ];
+
+    if (wooProductIds.length === 0) {
+      return [];
+    }
+
+    // ─────────────────────────────
+    // 3️⃣ Mapear Woo → producto interno
+    // ─────────────────────────────
+    const productosMapeados = await WooMap.getProductosInternosIds(
+      wooId,
+      wooProductIds
+    );
+
+    const wooToInternoMap = new Map(
+      productosMapeados.map(p => [
+        p.woo_product_id,
+        p.producto_interno_id
+      ])
+    );
+
+    // ─────────────────────────────
+    // 4️⃣ Normalizar pedidos
+    // ─────────────────────────────
+    const pedidosNormalizados = ordersRaw.map(order => {
+      const billing = order.billing || {};
+      const lineItems = Array.isArray(order.line_items)
+        ? order.line_items
+        : [];
+
+      const dateCompleted = order.date_completed
+        ? new Date(order.date_completed)
+        : order.date_modified
+        ? new Date(order.date_modified)
+        : null;
+
+      const expirationDate = dateCompleted
+        ? new Date(dateCompleted)
+        : null;
+
+      if (expirationDate) {
+        expirationDate.setFullYear(expirationDate.getFullYear() + 1);
+      }
+
+      const products = lineItems.map(item => {
+        const extraOptionData = (item.meta_data || []).find(
+          meta => meta.key === '_tmcartepo_data'
+        );
+
+        const extra_options = Array.isArray(extraOptionData?.value)
+          ? extraOptionData.value.map(opt => ({
+              name: opt.name,
+              value: opt.value,
+              price: parseFloat(opt.price) || 0
+            }))
+          : [];
+
+        return {
+          product_id: item.product_id,
+          producto_interno_id:
+            wooToInternoMap.get(item.product_id) || null,
+          name: item.name,
+          quantity: item.quantity,
+          variation_id: item.variation_id || null,
+          extra_options
+        };
+      });
+
+      return {
+        id: order.id,
+        woo_id: wooId,
+        customer_name: `${billing.first_name || ''} ${billing.last_name || ''}`.trim(),
+        customer_email: billing.email || null,
+        status: order.status,
+        date_completed: dateCompleted
+          ? dateCompleted.toISOString()
+          : null,
+        expiration_date: expirationDate
+          ? expirationDate.toISOString()
+          : null,
+        total: parseFloat(order.total) || 0,
+        currency: order.currency || null,
+        payment_method:
+          order.payment_method_title ??
+          order.payment_method ??
+          'unknown',
+        products
+      };
+    });
+
+    // ─────────────────────────────
+    // 5️⃣ Filtrar por productos internos
+    // ─────────────────────────────
+    const pedidosFiltrados = pedidosNormalizados.filter(pedido =>
+      pedido.products.some(
+        p =>
+          p.producto_interno_id &&
+          PRODUCTOS_INTERNOS_SET.has(p.producto_interno_id)
+      )
+    );
+
+    if (pedidosFiltrados.length === 0) {
+      return [];
+    }
+
+    // ─────────────────────────────
+    // 6️⃣ Obtener seriales asociados
+    // ─────────────────────────────
+    const seriales = await serialModel.getSerialesByPedidos(
+      pedidosFiltrados.map(p => ({
+        numero_pedido: p.id,
+        woo_id: p.woo_id
+      }))
+    );
+
+    const serialesPorPedido = seriales.reduce((acc, serial) => {
+      if (!acc[serial.numero_pedido]) {
+        acc[serial.numero_pedido] = [];
+      }
+
+      acc[serial.numero_pedido].push({
+        codigo: serial.codigo,
+        producto_id: serial.producto_id
+      });
+
+      return acc;
+    }, {});
+
+    // ─────────────────────────────
+    // 7️⃣ Adjuntar seriales
+    // ─────────────────────────────
+    const pedidosFinales = pedidosFiltrados.map(pedido => ({
+      ...pedido,
+      seriales: serialesPorPedido[pedido.id] || []
+    }));
+
+    console.log(
+      `✅ Woo ID ${wooId}: ${pedidosFinales.length} pedidos válidos devueltos`
+    );
+
+    return pedidosFinales;
+
+  } catch (error) {
+    console.error(
+      '❌ Error obteniendo pedidos Woo:',
+      error.response?.data || error
+    );
+    throw error;
+  }
+};
+
+
+const getPedidosFiltradoProductosGlobal = async (
+  productoInternoIds = [],
+  queryParams = {}
+) => {
+  const WOO_TIENDAS = [3, 4, 5];
+  let pedidosGlobales = [];
+
+  try {
+    // Normalizar paginación (defensivo, por si llega crudo)
+    const page = Math.max(parseInt(queryParams.page, 10) || 1, 1);
+    const per_page = Math.min(
+      Math.max(parseInt(queryParams.per_page, 10) || 10, 1),
+      100
+    );
+
+    const normalizedQueryParams = {
+      ...queryParams,
+      page,
+      per_page
+    };
+
+    for (const wooId of WOO_TIENDAS) {
+      console.log(
+        `🛒 Procesando pedidos tienda Woo ID: ${wooId} (page=${page}, per_page=${per_page})`
+      );
+
+      const pedidosPorTienda = await getPedidosFiltradoProductos(
+        wooId,
+        productoInternoIds,
+        normalizedQueryParams
+      );
+
+      if (Array.isArray(pedidosPorTienda) && pedidosPorTienda.length > 0) {
+        pedidosGlobales = pedidosGlobales.concat(pedidosPorTienda);
+      }
+    }
+
+    console.log(
+      `🌍 Total pedidos globales obtenidos: ${pedidosGlobales.length}`
+    );
+
+    return pedidosGlobales;
+
+  } catch (error) {
+    console.error(
+      '❌ Error obteniendo pedidos globales:',
+      error.response?.data || error
+    );
     throw error;
   }
 };
@@ -542,6 +1218,17 @@ const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
       const validOrders = orders.filter(order =>
         order.status === "completed" || order.status === "processing"
       );
+      /* log de depuracion */
+      /*
+     validOrders.forEach(pedido => {
+  pedido.line_items.forEach(item => {
+    console.log('Producto:', item.name);
+    console.log('Precio unitario:', item.price);
+    console.log('Cantidad:', item.quantity);
+    console.log('Total producto:', item.total);
+    console.log('---');
+  });
+});*/
 
       // Mapear al formato que ya usamos en getPedidos
       const formattedOrders = validOrders.map(order => ({
@@ -554,24 +1241,34 @@ const getAllPedidosByDateRange = async (idConfig, { startDate, endDate }) => {
         payment_method: order.payment_method_title || order.payment_method,
         date: order.date_created, // 👈 guardar fecha original en ISO
         products: order.line_items.map(item => {
-          const extraOptionData = (item.meta_data || []).find(meta => meta.key === '_tmcartepo_data');
+  const extraOptionData = (item.meta_data || []).find(
+    meta => meta.key === '_tmcartepo_data'
+  );
 
-          const extra_options = Array.isArray(extraOptionData?.value)
-            ? extraOptionData.value.map(opt => ({
-                name: opt.name,
-                value: opt.value,
-                price: opt.price || 0
-              }))
-            : [];
+  const extra_options = Array.isArray(extraOptionData?.value)
+    ? extraOptionData.value.map(opt => ({
+        name: opt.name,
+        value: opt.value,
+        price: parseFloat(opt.price || 0)
+      }))
+    : [];
 
-          return {
-            product_id: item.product_id,
-            name: item.name,
-            quantity: item.quantity,
-            variation_id: item.variation_id || null,
-            extra_options
-          };
-        })
+  return {
+    product_id: item.product_id,
+    name: item.name,
+    quantity: item.quantity,
+    variation_id: item.variation_id || null,
+
+    // 🔥 PRECIOS REALES
+    price_unit: parseFloat(item.price || 0),
+    subtotal: parseFloat(item.subtotal || 0),
+    total: parseFloat(item.total || 0),
+    total_tax: parseFloat(item.total_tax || 0),
+
+    extra_options
+  };
+})
+
       }));
 
       allOrders.push(...formattedOrders);
@@ -935,7 +1632,7 @@ const getVentasPorPais = async (idConfig, { startDate, endDate }) => {
   try {
     // 1️⃣ Obtener pedidos en el rango de fechas
     const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
- //   console.log("🐛 Pedidos crudos obtenidos:", JSON.stringify(pedidos, null, 2));
+ console.log("🐛 Pedidos crudos obtenidos:", JSON.stringify(pedidos, null, 2));
 //console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
 
     // 🔄 Tasas de conversión a CLP (ejemplo, actualizar según corresponda)
@@ -1063,7 +1760,7 @@ const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
   console.log("📅 Parámetros recibidos:", { startDate, endDate });
 
   try {
-    // 1️⃣ Definir las tiendas fijas (con idWoo)
+    // 1️⃣ Definir las tiendas fijas
     const tiendas = [
       { idConfig: 3, idWoo: 1, nombre: "licenciasoriginales" },
       { idConfig: 4, idWoo: 2, nombre: "licenciassoftware" },
@@ -1078,26 +1775,31 @@ const getVentasPorPaisGlobal = async ({ startDate, endDate }) => {
         tienda.idConfig,
         { startDate, endDate }
       );
+
       let total_concretado = 0;
 
-const fakeReq = {
-  params: { id: tienda.idConfig },
-  query: {
-    fechaInicio: startDate,
-    fechaFin: endDate,
-  },
-};
+      const fakeReq = {
+        params: { id: tienda.idConfig },
+        query: {
+          fechaInicio: startDate,
+          fechaFin: endDate,
+        },
+      };
 
-const fakeRes = {
-  status: () => ({
-    json: (data) => {
-      total_concretado = data.total_concretado || 0;
-    },
-  }),
-};
+      const fakeRes = {
+        status: () => ({
+          json: (data) => {
+            total_concretado = data.total_concretado || 0;
+          },
+        }),
+      };
 
-await Config.getTotalConcretadoByIdWooPeriodo(fakeReq, fakeRes);
-console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado}`);
+      await Config.getTotalConcretadoByIdWooPeriodo(fakeReq, fakeRes);
+
+      console.log(
+        `🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado}`
+      );
+
       informesTiendas.push({
         ...tienda,
         ...informeVentas,
@@ -1120,18 +1822,29 @@ console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado
           };
         }
 
-        globalVentas[venta.currency].total_ventas += venta.total_ventas;
-        globalVentas[venta.currency].total_pedidos += venta.total_pedidos;
-        globalVentas[venta.currency].total_ventas_clp += venta.total_ventas_clp;
+        globalVentas[venta.currency].total_ventas += venta.total_ventas || 0;
+        globalVentas[venta.currency].total_pedidos += venta.total_pedidos || 0;
+        globalVentas[venta.currency].total_ventas_clp +=
+          venta.total_ventas_clp || 0;
+
         globalVentas[venta.currency].total_ventas_clp_formatted =
           globalVentas[venta.currency].total_ventas_clp.toLocaleString("es-CL");
       });
     });
 
-    // 4️⃣ Convertir a array ordenado
-    const ventasPorPaisArray = Object.values(globalVentas).sort(
-      (a, b) => b.total_ventas_clp - a.total_ventas_clp
-    );
+    // 4️⃣ Convertir a array y calcular ticket promedio por país
+    const ventasPorPaisArray = Object.values(globalVentas).map((v) => {
+      const ticket_promedio =
+        v.total_pedidos > 0
+          ? Math.trunc(v.total_ventas_clp / v.total_pedidos)
+          : 0;
+
+      return {
+        ...v,
+        ticket_promedio,
+        ticket_promedio_formatted: ticket_promedio.toLocaleString("es-CL"),
+      };
+    }).sort((a, b) => b.total_ventas_clp - a.total_ventas_clp);
 
     // 5️⃣ Totales globales
     const totalOrders = informesTiendas.reduce(
@@ -1140,28 +1853,51 @@ console.log(`🏪 Tienda: ${tienda.nombre}, Total Concretado: ${total_concretado
     );
 
     const totalSalesCLP = Math.trunc(
-  ventasPorPaisArray.reduce(
-    (sum, v) => sum + (v.total_ventas_clp || 0),
-    0
-  )
-);
-
+      ventasPorPaisArray.reduce(
+        (sum, v) => sum + (v.total_ventas_clp || 0),
+        0
+      )
+    );
 
     const totalConcretadoGlobal = informesTiendas.reduce(
       (sum, t) => sum + (t.total_concretado || 0),
       0
     );
+
     const totalGeneral = totalSalesCLP + totalConcretadoGlobal;
-    
-    // 6️⃣ Retornar informe final
+    ventasPorPaisArray.forEach((v) => {
+  const porcentaje =
+    totalSalesCLP > 0
+      ? (v.total_ventas_clp / totalSalesCLP) * 100
+      : 0;
+
+  v.porcentaje_total = Number(porcentaje.toFixed(2));
+});
+
+
+    // 6️⃣ Ticket promedio global
+    const ticketPromedioGlobal =
+      totalOrders > 0
+        ? Math.trunc(totalSalesCLP / totalOrders)
+        : 0;
+
+    // 7️⃣ Retornar informe final
     return {
       total_orders: totalOrders,
       total_sales: totalSalesCLP,
       total_sales_formatted: totalSalesCLP.toLocaleString("es-CL"),
+
+      ticket_promedio: ticketPromedioGlobal,
+      ticket_promedio_formatted:
+        ticketPromedioGlobal.toLocaleString("es-CL"),
+
       total_concretado: totalConcretadoGlobal,
-      total_concretado_formatted: totalConcretadoGlobal.toLocaleString("es-CL"),
+      total_concretado_formatted:
+        totalConcretadoGlobal.toLocaleString("es-CL"),
+
       total_general: totalGeneral,
       total_general_formatted: totalGeneral.toLocaleString("es-CL"),
+
       ventas_por_pais: ventasPorPaisArray,
       detalle_por_tienda: informesTiendas,
     };
@@ -1472,8 +2208,324 @@ const getPedidosNoEnviadosPorTienda = async (wooId, pedidosWoo) => {
     throw error;
   }
 };
+// 📦 Informe de ventas por tipo de software (CLP)
+const getVentasPorTipoSoftware = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Generando informe de ventas por tipo de software...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
 
+  try {
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
 
+    // 🔄 Tasas de conversión a CLP
+    const conversionRates = {
+      MXN: 52,
+      PEN: 276,
+      COP: 0.24,
+      ARS: 1.46,
+      CLP: 1,
+    };
+
+    // 1️⃣ Inicializar categorías
+    const categorias = {
+      office: { categoria: "Office", cantidad_vendida: 0, ingresos_clp: 0 },
+      windows: { categoria: "Windows", cantidad_vendida: 0, ingresos_clp: 0 },
+      autocad: { categoria: "AutoCAD", cantidad_vendida: 0, ingresos_clp: 0 },
+    };
+
+    // 2️⃣ Recorrer pedidos y productos
+    pedidos.forEach((pedido) => {
+      const currency = pedido.currency || "CLP";
+      const rate = conversionRates[currency] || 1;
+
+      if (!Array.isArray(pedido.products)) return;
+
+      pedido.products.forEach((product) => {
+        const nombre = (product.name || "").toLowerCase();
+        const quantity = Number(product.quantity) || 0;
+        const totalProducto = Number(product.total) || 0;
+        const totalCLP = totalProducto * rate;
+
+        if (nombre.includes("office")) {
+          categorias.office.cantidad_vendida += quantity;
+          categorias.office.ingresos_clp += totalCLP;
+        } else if (nombre.includes("windows")) {
+          categorias.windows.cantidad_vendida += quantity;
+          categorias.windows.ingresos_clp += totalCLP;
+        } else if (nombre.includes("autocad")) {
+          categorias.autocad.cantidad_vendida += quantity;
+          categorias.autocad.ingresos_clp += totalCLP;
+        }
+      });
+    });
+
+    // 3️⃣ Calcular ingresos totales
+    const ingresosTotales = Object.values(categorias).reduce(
+      (sum, cat) => sum + cat.ingresos_clp,
+      0
+    );
+
+    // 4️⃣ Enriquecer métricas (% del total y ticket promedio)
+    const resultado = Object.values(categorias).map((cat) => {
+      const ticketPromedio =
+        cat.cantidad_vendida > 0
+          ? cat.ingresos_clp / cat.cantidad_vendida
+          : 0;
+
+      const porcentajeTotal =
+        ingresosTotales > 0
+          ? (cat.ingresos_clp / ingresosTotales) * 100
+          : 0;
+
+      return {
+        categoria: cat.categoria,
+        cantidad_vendida: cat.cantidad_vendida,
+
+        ingresos_clp: Math.round(cat.ingresos_clp),
+        ingresos_clp_formatted: Math.round(cat.ingresos_clp).toLocaleString("es-CL"),
+
+        porcentaje_total: Number(porcentajeTotal.toFixed(2)),
+
+        ticket_promedio_clp: Math.round(ticketPromedio),
+        ticket_promedio_clp_formatted: Math.round(ticketPromedio).toLocaleString("es-CL"),
+      };
+    });
+
+    // 5️⃣ Retornar informe
+    return {
+      total_orders: pedidos.length,
+      ingresos_totales_clp: Math.round(ingresosTotales),
+      ingresos_totales_clp_formatted: Math.round(ingresosTotales).toLocaleString("es-CL"),
+      ventas_por_tipo_software: resultado,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar informe de ventas por tipo de software:", error);
+    throw error;
+  }
+};
+// 📦 Informe GLOBAL de ventas por tipo de software (3 tiendas)
+const getVentasPorTipoSoftwareGlobal = async ({ startDate, endDate }) => {
+  console.log("📊 Generando informe GLOBAL de ventas por tipo de software...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 🏬 IDs de las tiendas
+    const tiendas = [3, 4, 5];
+
+    // 🔄 Tasas de conversión a CLP
+    const conversionRates = {
+      MXN: 52,
+      PEN: 276,
+      COP: 0.24,
+      ARS: 1.46,
+      CLP: 1,
+    };
+
+    // 1️⃣ Inicializar categorías globales
+    const categorias = {
+      office: { categoria: "Office", cantidad_vendida: 0, ingresos_clp: 0 },
+      windows: { categoria: "Windows", cantidad_vendida: 0, ingresos_clp: 0 },
+      autocad: { categoria: "AutoCAD", cantidad_vendida: 0, ingresos_clp: 0 },
+    };
+
+    let totalOrders = 0;
+
+    // 2️⃣ Recorrer tiendas
+    for (const idConfig of tiendas) {
+      console.log(`🏬 Procesando tienda ID: ${idConfig}`);
+
+      const pedidos = await getAllPedidosByDateRange(idConfig, {
+        startDate,
+        endDate,
+      });
+
+      totalOrders += pedidos.length;
+
+      // 3️⃣ Procesar pedidos de la tienda
+      pedidos.forEach((pedido) => {
+        const currency = pedido.currency || "CLP";
+        const rate = conversionRates[currency] || 1;
+
+        if (!Array.isArray(pedido.products)) return;
+
+        pedido.products.forEach((product) => {
+          const nombre = (product.name || "").toLowerCase();
+          const quantity = Number(product.quantity) || 0;
+          const totalProducto = Number(product.total) || 0;
+          const totalCLP = totalProducto * rate;
+
+          if (nombre.includes("office")) {
+            categorias.office.cantidad_vendida += quantity;
+            categorias.office.ingresos_clp += totalCLP;
+          } else if (nombre.includes("windows")) {
+            categorias.windows.cantidad_vendida += quantity;
+            categorias.windows.ingresos_clp += totalCLP;
+          } else if (nombre.includes("autocad")) {
+            categorias.autocad.cantidad_vendida += quantity;
+            categorias.autocad.ingresos_clp += totalCLP;
+          }
+        });
+      });
+    }
+
+    // 4️⃣ Calcular ingresos totales globales
+    const ingresosTotales = Object.values(categorias).reduce(
+      (sum, cat) => sum + cat.ingresos_clp,
+      0
+    );
+
+    // 5️⃣ Enriquecer métricas
+    const resultado = Object.values(categorias).map((cat) => {
+      const ticketPromedio =
+        cat.cantidad_vendida > 0
+          ? cat.ingresos_clp / cat.cantidad_vendida
+          : 0;
+
+      const porcentajeTotal =
+        ingresosTotales > 0
+          ? (cat.ingresos_clp / ingresosTotales) * 100
+          : 0;
+
+      return {
+        categoria: cat.categoria,
+        cantidad_vendida: cat.cantidad_vendida,
+
+        ingresos_clp: Math.round(cat.ingresos_clp),
+        ingresos_clp_formatted: Math.round(cat.ingresos_clp).toLocaleString("es-CL"),
+
+        porcentaje_total: Number(porcentajeTotal.toFixed(2)),
+
+        ticket_promedio_clp: Math.round(ticketPromedio),
+        ticket_promedio_clp_formatted: Math.round(ticketPromedio).toLocaleString("es-CL"),
+      };
+    });
+
+    // 6️⃣ Retornar informe global
+    return {
+      tiendas_incluidas: tiendas,
+      total_orders: totalOrders,
+
+      ingresos_totales_clp: Math.round(ingresosTotales),
+      ingresos_totales_clp_formatted: Math.round(ingresosTotales).toLocaleString("es-CL"),
+
+      ventas_por_tipo_software: resultado,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar informe GLOBAL de ventas por tipo de software:", error);
+    throw error;
+  }
+};
+// 📦 Informe: Top productos más vendidos (ranking)
+const getTopProductosVendidos = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Generando ranking de productos más vendidos...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 1️⃣ Obtener pedidos
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
+
+    // 🔄 Tasas de conversión a CLP
+    const conversionRates = {
+      MXN: 52,
+      PEN: 276,
+      COP: 0.24,
+      ARS: 1.46,
+      CLP: 1,
+    };
+
+    // 2️⃣ Obtener todos los woo_product_id únicos
+    const wooProductIdsSet = new Set();
+
+    pedidos.forEach(pedido => {
+      if (!Array.isArray(pedido.products)) return;
+      pedido.products.forEach(p => {
+        if (p.product_id) wooProductIdsSet.add(p.product_id);
+      });
+    });
+
+    const wooProductIds = Array.from(wooProductIdsSet);
+
+    // 3️⃣ Mapear a productos internos
+    const mapeos = await WooMap.getProductosInternosIds(idConfig, wooProductIds);
+
+    const wooToInternoMap = new Map(
+      mapeos
+        .filter(m => m.producto_interno_id !== null)
+        .map(m => [m.woo_product_id, m.producto_interno_id])
+    );
+
+    // 4️⃣ Acumulador por producto interno
+    const productos = {};
+
+    pedidos.forEach(pedido => {
+      const currency = pedido.currency || "CLP";
+      const rate = conversionRates[currency] || 1;
+
+      if (!Array.isArray(pedido.products)) return;
+
+      pedido.products.forEach(product => {
+        const internoId = wooToInternoMap.get(product.product_id);
+        if (!internoId) return; // ⛔ ignorar sin mapeo
+
+        const quantity = Number(product.quantity) || 0;
+        const totalProducto = Number(product.total) || 0;
+        const totalCLP = totalProducto * rate;
+
+        if (!productos[internoId]) {
+          productos[internoId] = {
+            producto_interno_id: internoId,
+            nombre: product.name,
+            cantidad_vendida: 0,
+            ingresos_clp: 0,
+          };
+        }
+
+        productos[internoId].cantidad_vendida += quantity;
+        productos[internoId].ingresos_clp += totalCLP;
+      });
+    });
+
+    // 5️⃣ Normalizar productos y calcular ticket promedio
+    const productosArray = Object.values(productos).map(p => {
+      const ticketPromedio =
+        p.cantidad_vendida > 0 ? p.ingresos_clp / p.cantidad_vendida : 0;
+
+      return {
+        producto_interno_id: p.producto_interno_id,
+        nombre: p.nombre,
+        cantidad_vendida: p.cantidad_vendida,
+        ingresos_clp: Math.round(p.ingresos_clp),
+        ingresos_clp_formatted: Math.round(p.ingresos_clp).toLocaleString("es-CL"),
+        ticket_promedio_clp: Math.round(ticketPromedio),
+        ticket_promedio_clp_formatted: Math.round(ticketPromedio).toLocaleString("es-CL"),
+      };
+    });
+
+    // 6️⃣ Rankings
+    const top10PorCantidad = [...productosArray]
+      .sort((a, b) => b.cantidad_vendida - a.cantidad_vendida)
+      .slice(0, 10);
+
+    const top10PorIngresos = [...productosArray]
+      .sort((a, b) => b.ingresos_clp - a.ingresos_clp)
+      .slice(0, 10);
+
+    // 7️⃣ Resultado final
+    return {
+      total_orders: pedidos.length,
+      total_productos_rankeados: productosArray.length,
+      top_10_por_cantidad: top10PorCantidad,
+      top_10_por_ingresos: top10PorIngresos,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar ranking de productos:", error);
+    throw error;
+  }
+};
 module.exports = {
   getAllConfigs,
   getConfigById,
@@ -1488,6 +2540,7 @@ module.exports = {
   searchPedidos,
   getAllProducts,
   syncProductsFromStore,
+  getAllPedidosByDateRange,
   getVentasTotalesMXN,
   getTendenciaProductosMXN,
   getVentasPorPais,
@@ -1497,5 +2550,11 @@ module.exports = {
   getFlowConfigById,
   getPedidosFallidos,
   updatePedido,
-  getPedidos2
+  getPedidos2,
+  getVentasPorTipoSoftware,
+  getVentasPorTipoSoftwareGlobal,
+  getTopProductosVendidos,
+  getPedidosFiltradoProductos,
+  getPedidosFiltradoProductosGlobal
+  
 };
