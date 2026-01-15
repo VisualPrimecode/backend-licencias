@@ -1,4 +1,135 @@
 const WooConfig = require('../models/woocommerce_config.model');
+const WooAuxliar = require('../models/woo_config_auxiliar');
+/** aca falta el importa del woomaps y el webhook model que rompe el tema por el bug cricular dependecy  */
+
+
+/*
+const getTopProductosVendidos = async (idConfig, { startDate, endDate }) => {
+  console.log("📊 Generando ranking de productos más vendidos...");
+  console.log("📅 Parámetros recibidos:", { startDate, endDate });
+
+  try {
+    // 1️⃣ Obtener pedidos
+    const pedidos = await getAllPedidosByDateRange(idConfig, { startDate, endDate });
+    console.log(`📦 Total pedidos obtenidos: ${pedidos.length}`);
+
+    // 🔄 Tasas de conversión a CLP
+    const conversionRates = {
+      MXN: 52,
+      PEN: 276,
+      COP: 0.24,
+      ARS: 1.46,
+      CLP: 1,
+    };
+
+    // 2️⃣ Obtener todos los woo_product_id únicos
+    const wooProductIdsSet = new Set();
+
+    pedidos.forEach(pedido => {
+      if (!Array.isArray(pedido.products)) return;
+      pedido.products.forEach(p => {
+        if (p.product_id) wooProductIdsSet.add(p.product_id);
+      });
+    });
+
+    const wooProductIds = Array.from(wooProductIdsSet);
+
+    // 3️⃣ Mapear a productos internos
+    const mapeos = await WooMap.getProductosInternosIds(idConfig, wooProductIds);
+
+    const wooToInternoMap = new Map(
+      mapeos
+        .filter(m => m.producto_interno_id !== null)
+        .map(m => [m.woo_product_id, m.producto_interno_id])
+    );
+
+    // 4️⃣ Acumulador por producto interno
+    const productos = {};
+
+    pedidos.forEach(pedido => {
+      const currency = pedido.currency || "CLP";
+      const rate = conversionRates[currency] || 1;
+
+      if (!Array.isArray(pedido.products)) return;
+
+      pedido.products.forEach(product => {
+        const internoId = wooToInternoMap.get(product.product_id);
+        if (!internoId) return; // ⛔ ignorar sin mapeo
+
+        const quantity = Number(product.quantity) || 0;
+        const totalProducto = Number(product.total) || 0;
+        const totalCLP = totalProducto * rate;
+
+        if (!productos[internoId]) {
+          productos[internoId] = {
+            producto_interno_id: internoId,
+            nombre: product.name,
+            cantidad_vendida: 0,
+            ingresos_clp: 0,
+          };
+        }
+
+        productos[internoId].cantidad_vendida += quantity;
+        productos[internoId].ingresos_clp += totalCLP;
+      });
+    });
+
+    // 5️⃣ Normalizar productos y calcular ticket promedio
+    const productosArray = Object.values(productos).map(p => {
+      const ticketPromedio =
+        p.cantidad_vendida > 0 ? p.ingresos_clp / p.cantidad_vendida : 0;
+
+      return {
+        producto_interno_id: p.producto_interno_id,
+        nombre: p.nombre,
+        cantidad_vendida: p.cantidad_vendida,
+        ingresos_clp: Math.round(p.ingresos_clp),
+        ingresos_clp_formatted: Math.round(p.ingresos_clp).toLocaleString("es-CL"),
+        ticket_promedio_clp: Math.round(ticketPromedio),
+        ticket_promedio_clp_formatted: Math.round(ticketPromedio).toLocaleString("es-CL"),
+      };
+    });
+
+    // 6️⃣ Rankings
+    const top10PorCantidad = [...productosArray]
+      .sort((a, b) => b.cantidad_vendida - a.cantidad_vendida)
+      .slice(0, 10);
+
+    const top10PorIngresos = [...productosArray]
+      .sort((a, b) => b.ingresos_clp - a.ingresos_clp)
+      .slice(0, 10);
+
+    // 7️⃣ Resultado final
+    return {
+      total_orders: pedidos.length,
+      total_productos_rankeados: productosArray.length,
+      top_10_por_cantidad: top10PorCantidad,
+      top_10_por_ingresos: top10PorIngresos,
+    };
+
+  } catch (error) {
+    console.error("💥 Error al generar ranking de productos:", error);
+    throw error;
+  }
+};*/
+exports.getTopProductosVendidosController = async (req, res) => {
+  console.log('📊 Generando informe de productos más vendidos...');
+  try {
+    const { id } = req.params; // ID de la configuración de WooCommerce
+    const { startDate, endDate } = req.query; // rango de fechas desde query params
+
+    const informe = await WooAuxliar.getTopProductosVendidos(id, { startDate, endDate });
+
+    if (!informe || informe.total_orders === 0) {
+      return res.status(404).json({ message: 'No se encontraron ventas en el periodo indicado' });
+    }
+
+    res.json(informe);
+  } catch (error) {
+    console.error('💥 Error al generar informe de ventas por país/divisa:', error);
+    res.status(500).json({ error: 'Error al generar informe de ventas por país/divisa' });
+  }
+};
 exports.getAllConfigs = async (req, res) => {
   console.log('🔍 Obteniendo todas las configuraciones WooCommerce...');
   try {
@@ -59,7 +190,7 @@ exports.getAllConfigsWooProducts = async (req, res) => {
 
 //obtener todos los pedidos de un WooCommerce
 exports.getAllConfigsWooOrders = async (req, res) => {
-  console.log('🔍 Obteniendo pedidos WooCommerce...');
+  console.log('🔍 Obteniendo pedidos WooCommerce.333..');
   try {
     const { id } = req.params;
     const queryParams = req.query; // ✅ Añadido: recoger los query params
@@ -77,6 +208,143 @@ exports.getAllConfigsWooOrders = async (req, res) => {
     res.status(500).json({ error: 'Error al obtener pedidos WooCommerce' });
   }
 };
+exports.getWooOrdersWithFilter = async (req, res) => {
+  console.log('🔍 Obteniendo pedidos WooCommerce...');
+
+  try {
+    const { id } = req.params;
+    const { productos, ...queryParams } = req.query;
+
+    // Convertir productos a array de números
+    const productoInternoIds = productos
+      ? productos.split(',').map(id => Number(id)).filter(Boolean)
+      : [];
+
+    const orders = await WooConfig.getPedidosFiltradoProductos(
+      id,
+      productoInternoIds,
+      queryParams
+    );
+
+    if (!orders) {
+      return res.status(404).json({
+        error: 'Configuración no encontrada'
+      });
+    }
+
+    res.json(orders);
+
+  } catch (error) {
+    console.error('Error al obtener pedidos WooCommerce:', error);
+    res.status(500).json({
+      error: 'Error al obtener pedidos WooCommerce'
+    });
+  }
+};
+/*
+exports.getWooOrdersWithFilterGlobal = async (req, res) => {
+  console.log('🌍 Obteniendo pedidos WooCommerce (GLOBAL)...');
+
+  try {
+    const { productos, ...queryParams } = req.query;
+
+    // Convertir productos a array de números
+    const productoInternoIds = productos
+      ? productos
+          .split(',')
+          .map(id => Number(id))
+          .filter(Boolean)
+      : [];
+
+    const orders =
+      await WooConfig.getPedidosFiltradoProductosGlobal(
+        productoInternoIds,
+        queryParams
+      );
+
+    if (!orders) {
+      return res.status(404).json({
+        error: 'No se encontraron pedidos'
+      });
+    }
+
+    res.json(orders);
+
+  } catch (error) {
+    console.error(
+      'Error al obtener pedidos WooCommerce (GLOBAL):',
+      error
+    );
+
+    res.status(500).json({
+      error: 'Error al obtener pedidos WooCommerce'
+    });
+  }
+};*/
+exports.getWooOrdersWithFilterGlobal = async (req, res) => {
+  console.log('🌍 Obteniendo pedidos WooCommerce (GLOBAL)...');
+
+  try {
+    const { productos, page, per_page, ...restQueryParams } = req.query;
+
+    // ─────────────────────────────
+    // 1️⃣ Normalizar productos internos
+    // ─────────────────────────────
+    const productoInternoIds = productos
+      ? productos
+          .split(',')
+          .map(id => Number(id))
+          .filter(id => Number.isInteger(id) && id > 0)
+      : [];
+
+    // ─────────────────────────────
+    // 2️⃣ Normalizar paginación
+    //    (aplica por tienda Woo)
+    // ─────────────────────────────
+    const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    const perPageNumber = Math.min(
+      Math.max(parseInt(per_page, 10) || 10, 1),
+      100 // límite WooCommerce
+    );
+
+    const queryParams = {
+      page: pageNumber,
+      per_page: perPageNumber,
+      ...restQueryParams
+    };
+
+    // ─────────────────────────────
+    // 3️⃣ Obtener pedidos globales
+    // ─────────────────────────────
+    const orders =
+      await WooConfig.getPedidosFiltradoProductosGlobal(
+        productoInternoIds,
+        queryParams
+      );
+
+    if (!Array.isArray(orders) || orders.length === 0) {
+      return res.json([]);
+    }
+
+    // ─────────────────────────────
+    // 4️⃣ Respuesta plana (sin paginar global)
+    // ─────────────────────────────
+    res.json(orders);
+
+  } catch (error) {
+    console.error(
+      '❌ Error al obtener pedidos WooCommerce (GLOBAL):',
+      error
+    );
+
+    res.status(500).json({
+      error: 'Error al obtener pedidos WooCommerce'
+    });
+  }
+};
+
+
+
 // Actualizar un pedido de WooCommerce
 exports.updateWooOrder = async (req, res) => {
   console.log("🔄 Actualizando pedido WooCommerce...");
@@ -243,6 +511,7 @@ exports.deleteConfig = async (req, res) => {
     res.status(500).json({ error: 'Error al eliminar configuración' });
   }
 };
+
 exports.getVentasPorPais = async (req, res) => {
   console.log('📊 Generando informe de ventas por país/divisa...');
   try {
@@ -261,6 +530,130 @@ exports.getVentasPorPais = async (req, res) => {
     res.status(500).json({ error: 'Error al generar informe de ventas por país/divisa' });
   }
 };
+exports.getVentasPorTipoSoftware = async (req, res) => {
+  console.log('📊 Generando informe de ventas por tipo de software...');
+
+  try {
+    const { id } = req.params; // ID de la configuración de WooCommerce
+    const { startDate, endDate } = req.query; // rango de fechas desde query params
+
+    const informe = await WooConfig.getVentasPorTipoSoftware(id, { startDate, endDate });
+
+    if (
+      !informe ||
+      !Array.isArray(informe.ventas_por_tipo_software) ||
+      informe.ventas_por_tipo_software.every(
+        (cat) => cat.cantidad_vendida === 0 && cat.ingresos === 0
+      )
+    ) {
+      return res
+        .status(404)
+        .json({ message: 'No se encontraron ventas en el periodo indicado' });
+    }
+
+    res.json(informe);
+
+  } catch (error) {
+    console.error('💥 Error al generar informe de ventas por tipo de software:', error);
+    res
+      .status(500)
+      .json({ error: 'Error al generar informe de ventas por tipo de software' });
+  }
+};
+exports.getVentasPorTipoSoftwareGlobal = async (req, res) => {
+  console.log('📊 Generando informe de ventas por tipo de software...');
+
+  try {
+    const { startDate, endDate } = req.query; // rango de fechas desde query params
+
+    const informe = await WooAuxliar.getVentasPorTipoSoftwareGlobal({ startDate, endDate });
+
+    if (
+      !informe ||
+      !Array.isArray(informe.ventas_por_tipo_software) ||
+      informe.ventas_por_tipo_software.every(
+        (cat) => cat.cantidad_vendida === 0 && cat.ingresos === 0
+      )
+    ) {
+      return res
+        .status(404)
+        .json({ message: 'No se encontraron ventas en el periodo indicado' });
+    }
+
+    res.json(informe);
+
+  } catch (error) {
+    console.error('💥 Error al generar informe de ventas por tipo de software:', error);
+    res
+      .status(500)
+      .json({ error: 'Error al generar informe de ventas por tipo de software' });
+  }
+};
+exports.getVentasPorProductoGlobal = async (req, res) => {
+  console.log('📊 Generando informe de ventas por producto...');
+
+  try {
+    const { startDate, endDate } = req.query;
+
+    const informe = await WooAuxliar.getVentasPorProductoGlobal({
+      startDate,
+      endDate,
+    });
+
+    if (
+      !informe ||
+      !Array.isArray(informe.ventas_por_producto) ||
+      informe.ventas_por_producto.length === 0 ||
+      informe.ventas_por_producto.every(
+        (prod) =>
+          prod.cantidad_vendida === 0 && prod.ingresos_clp === 0
+      )
+    ) {
+      return res
+        .status(404)
+        .json({ message: 'No se encontraron ventas en el periodo indicado' });
+    }
+
+    res.json(informe);
+
+  } catch (error) {
+    console.error('💥 Error al generar informe de ventas por producto:', error);
+    res
+      .status(500)
+      .json({ error: 'Error al generar informe de ventas por producto' });
+  }
+};
+
+exports.getCrecimientoVentasGlobal = async (req, res) => {
+  console.log('📈 Generando informe de crecimiento de ventas...');
+
+  try {
+    const informe = await WooAuxliar.getCrecimientoVentasGlobal();
+
+    if (
+      !informe ||
+      (!informe.hoy_vs_ayer && !informe.mes_actual_vs_anterior)
+    ) {
+      return res
+        .status(404)
+        .json({ message: 'No se pudieron calcular métricas de crecimiento' });
+    }
+
+    res.json(informe);
+
+  } catch (error) {
+    console.error(
+      '💥 Error al generar informe de crecimiento de ventas:',
+      error
+    );
+
+    res.status(500).json({
+      error: 'Error al generar informe de crecimiento de ventas',
+    });
+  }
+};
+
+
 
 exports.getVentasTotalesMXN = async (req, res) => {
   console.log('📊 Generando informe de ventas en MXN...');
